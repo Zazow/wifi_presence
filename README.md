@@ -38,6 +38,15 @@ cd frontend && npm install && npm run build && cd ..
 
 ## Run
 
+One command, production mode (builds the frontend and serves everything from a
+single process — what you'd run on the always-on server/Pi):
+
+```bash
+./start.sh            # serves on http://0.0.0.0:8000  (override with PORT=...)
+```
+
+Or run the backend directly:
+
 ```bash
 .venv/bin/python -m uvicorn backend.app:app --host 0.0.0.0 --port 8000
 ```
@@ -75,12 +84,14 @@ sudo systemctl enable --now wifi-presence
 
 ## Development
 
+One command runs both the backend (auto-reload) and the Vite dev server:
+
 ```bash
-# Terminal 1: backend (auto-reload)
-.venv/bin/python -m uvicorn backend.app:app --reload --port 8000
-# Terminal 2: frontend dev server (proxies /api to :8000)
-cd frontend && npm run dev
+./dev.sh              # then open http://localhost:5173  (Ctrl+C stops both)
 ```
+
+Vite proxies `/api` and the WebSocket to the backend on :8000, so the UI hot-
+reloads while the API stays live.
 
 ## Tests
 
