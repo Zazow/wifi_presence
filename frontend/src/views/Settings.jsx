@@ -16,6 +16,7 @@ const ADVANCED = [
   ["cmd_assoclist", "Assoc list command ({iface} placeholder)"],
   ["cmd_neigh", "Neighbour/ARP command"],
   ["cmd_leases", "DHCP leases command"],
+  ["cmd_fdb", "Bridge table command (finds devices behind APs; blank = off)"],
 ];
 
 export default function Settings() {

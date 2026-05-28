@@ -88,6 +88,7 @@ class SettingsIn(BaseModel):
     cmd_assoclist: Optional[str] = None
     cmd_neigh: Optional[str] = None
     cmd_leases: Optional[str] = None
+    cmd_fdb: Optional[str] = None
 
 
 def _redact(settings: dict[str, Any]) -> dict[str, Any]:

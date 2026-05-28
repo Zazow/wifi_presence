@@ -88,18 +88,55 @@ def parse_leases(output: str) -> dict[str, str]:
     return result
 
 
+def parse_fdb(output: str) -> set[str]:
+    """Parse the bridge forwarding table into the set of non-local MACs.
+
+    This is what lets us see devices behind APs / AiMesh nodes / wired switches:
+    the main router's `wl assoclist` only knows its own wifi clients, but the
+    bridge learns every MAC whose traffic crosses it, including clients on other
+    access points (forwarded via the AP's uplink port).
+
+    Supports `brctl showmacs <br>` output:
+        port no   mac addr            is local?   ageing timer
+          1       aa:bb:cc:dd:ee:ff   no             1.23
+    and falls back to iproute2 `bridge fdb show`:
+        aa:bb:cc:dd:ee:ff dev eth6 master br0
+    Local/permanent/self entries (the bridge's own ports) are excluded.
+    """
+    macs: set[str] = set()
+    for line in output.splitlines():
+        low = line.lower()
+        parts = line.split()
+        # brctl showmacs: second column is the MAC, third is is_local?
+        if len(parts) >= 3 and _MAC_RE.fullmatch(parts[1] or ""):
+            if parts[2].lower() in ("no", "0", "false"):
+                mac = _canon(parts[1])
+                if mac != "ff:ff:ff:ff:ff:ff":
+                    macs.add(mac)
+            continue
+        # bridge fdb show fallback
+        m = _MAC_RE.search(line)
+        if m and not any(t in low for t in ("self", "permanent", "local")):
+            mac = _canon(m.group(1))
+            if mac != "ff:ff:ff:ff:ff:ff":
+                macs.add(mac)
+    return macs
+
+
 def merge_observations(
-    associated: dict[str, str],
+    present: dict[str, Optional[str]],
     ip_by_mac: dict[str, str],
     host_by_mac: dict[str, str],
 ) -> list[dict[str, Any]]:
     """Build the normalized observation list for currently-present devices.
 
-    Only associated (wifi-connected) MACs are reported as present; the other
-    maps just enrich them.
+    `present` maps every currently-present MAC to its wifi interface, or None
+    when the device was seen via the bridge table rather than associated to one
+    of the main router's own radios (e.g. it's behind an AP). The other maps
+    just enrich each device with IP and hostname.
     """
     observations = []
-    for mac, iface in associated.items():
+    for mac, iface in present.items():
         observations.append(
             {
                 "mac": mac,
@@ -189,10 +226,20 @@ class RouterClient:
                 cmd = s["cmd_assoclist"].format(iface=iface)
                 associated.update(parse_assoclist(self._run(client, cmd), iface))
 
+            # Bridge table catches devices behind APs / AiMesh nodes / switches
+            # that never associate to the main router's own radios.
+            fdb_macs: set[str] = set()
+            if s.get("cmd_fdb"):
+                fdb_macs = parse_fdb(self._run(client, s["cmd_fdb"]))
+
             ip_by_mac = parse_neigh(self._run(client, s["cmd_neigh"]))
             host_by_mac = parse_leases(self._run(client, s["cmd_leases"]))
 
-        return merge_observations(associated, ip_by_mac, host_by_mac)
+        # Union: associated MACs keep their wifi interface; FDB-only MACs have
+        # interface None (we don't know which AP they're on).
+        present: dict[str, Optional[str]] = {m: None for m in fdb_macs}
+        present.update(associated)
+        return merge_observations(present, ip_by_mac, host_by_mac)
 
     def test_connection(self) -> dict[str, Any]:
         """Used by the Settings 'Test connection' button."""

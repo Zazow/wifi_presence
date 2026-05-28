@@ -101,6 +101,12 @@ reloads while the API stays live.
 
 ## Notes
 
+- **Devices behind APs / AiMesh nodes:** `wl assoclist` only reports clients on
+  the *main router's own* radios. To also catch devices on separate access
+  points, mesh nodes, or wired switches, the poller reads the router's bridge
+  forwarding table (`brctl showmacs br0`) and treats those MACs as present too.
+  Those devices show no wifi band (interface is unknown). Clear the *Bridge
+  table command* in Settings → Advanced to disable this and go wifi-only.
 - **MAC randomization:** modern iPhones/Androids use a private MAC per SSID, but
   it's stable on your home wifi — once mapped, a device stays mapped.
 - **Notes on commands:** if your firmware uses different paths, override the

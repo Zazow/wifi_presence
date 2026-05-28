@@ -25,6 +25,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "cmd_assoclist": "wl -i {iface} assoclist",
     "cmd_neigh": "ip neigh show",
     "cmd_leases": "cat /var/lib/misc/dnsmasq.leases 2>/dev/null",
+    # Bridge forwarding table — finds devices behind APs / AiMesh nodes.
+    # Empty string disables it (wifi-only via assoclist).
+    "cmd_fdb": "brctl showmacs br0 2>/dev/null",
 }
 
 SCHEMA = """
