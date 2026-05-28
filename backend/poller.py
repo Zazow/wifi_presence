@@ -51,31 +51,49 @@ class Poller:
         }
         return state
 
-    async def _loop(self) -> None:
-        backoff = 5
-        while not self._stop.is_set():
-            settings = self.store.get_settings()
-            interval = max(5, int(settings.get("poll_interval", 30)))
-            try:
-                observations = await asyncio.to_thread(self.router.fetch_clients)
-                self.store.record_observations(observations, time.time())
-                self.last_error = None
-                self.last_poll = time.time()
-                backoff = 5
-            except Exception as e:
-                self.last_error = f"{type(e).__name__}: {e}"
-
-            # Recompute + broadcast regardless, so the UI reflects grace-window
-            # expiries even while the router is briefly unreachable.
-            state = self.current_state()
-            self.last_state = state
+    async def _emit(self, state: dict[str, Any]) -> None:
+        """Broadcast state, swallowing broadcast errors so they can't kill the
+        poll loop (a single bad WebSocket must not stop live updates)."""
+        try:
             result = self.broadcast(state)
             if asyncio.iscoroutine(result):
                 await result
+        except Exception:
+            pass
+
+    async def _run_cycle(self) -> dict[str, Any]:
+        """One poll: SSH fetch -> persist -> recompute -> broadcast.
+
+        Router/SSH failures are captured into last_error rather than raised, and
+        we recompute + broadcast regardless so the UI reflects grace-window
+        expiries even while the router is briefly unreachable.
+        """
+        try:
+            observations = await asyncio.to_thread(self.router.fetch_clients)
+            self.store.record_observations(observations, time.time())
+            self.last_error = None
+            self.last_poll = time.time()
+        except Exception as e:
+            self.last_error = f"{type(e).__name__}: {e}"
+
+        state = self.current_state()
+        self.last_state = state
+        await self._emit(state)
+        return state
+
+    async def _loop(self) -> None:
+        backoff = 5
+        while not self._stop.is_set():
+            interval = max(5, int(self.store.get_settings().get("poll_interval", 30)))
+            # Belt-and-suspenders: nothing in a cycle should ever propagate out
+            # and terminate the loop, or live updates would stop permanently.
+            try:
+                await self._run_cycle()
+            except Exception as e:
+                self.last_error = f"poller: {type(e).__name__}: {e}"
 
             wait = interval if self.last_error is None else min(backoff, 60)
-            if self.last_error is not None:
-                backoff = min(backoff * 2, 60)
+            backoff = 5 if self.last_error is None else min(backoff * 2, 60)
             try:
                 await asyncio.wait_for(self._stop.wait(), timeout=wait)
             except asyncio.TimeoutError:

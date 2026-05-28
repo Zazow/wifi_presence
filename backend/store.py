@@ -58,13 +58,36 @@ CREATE TABLE IF NOT EXISTS settings (
 """
 
 
+# The database lives in a dedicated data/ directory next to the project, at a
+# stable ABSOLUTE path. This matters: a relative path would resolve against the
+# current working directory, so launching the server from a different folder
+# would silently open a *different* (empty) database and appear to "wipe" all
+# saved settings and device mappings. It also keeps the DB out of the way of
+# stray-file cleanup.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_DB_PATH = PROJECT_ROOT / "data" / "wifi_presence.db"
+
+
+def resolve_db_path(override: str | None = None) -> Path:
+    """Resolve the database path to a stable absolute location.
+
+    `override` (e.g. from the WIFI_PRESENCE_DB env var) wins when set; otherwise
+    we use the project's data/ directory.
+    """
+    if override:
+        return Path(override).expanduser().resolve()
+    return DEFAULT_DB_PATH
+
+
 def _now() -> float:
     return time.time()
 
 
 class Store:
-    def __init__(self, path: str | Path = "wifi_presence.db"):
+    def __init__(self, path: str | Path = DEFAULT_DB_PATH):
         self.path = str(path)
+        # Make sure the parent directory exists (e.g. the data/ dir on first run).
+        Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         # check_same_thread=False because the async poller and the request
         # handlers may touch the connection from different threads; we guard
         # with a lock.

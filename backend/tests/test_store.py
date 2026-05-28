@@ -1,6 +1,20 @@
 import time
 
-from backend.store import Store
+from backend.store import DEFAULT_DB_PATH, Store, resolve_db_path
+
+
+def test_default_db_path_is_absolute_and_cwd_independent():
+    p = resolve_db_path(None)
+    assert p.is_absolute()
+    assert p == DEFAULT_DB_PATH
+    assert p.name == "wifi_presence.db"
+    # Lives in a dedicated data dir, not as a stray file at an arbitrary cwd.
+    assert p.parent.name == "data"
+
+
+def test_db_path_override_resolves_absolute():
+    p = resolve_db_path("~/some/where/wp.db")
+    assert p.is_absolute()
 
 
 def _store(tmp_path):

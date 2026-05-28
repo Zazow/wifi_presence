@@ -13,9 +13,9 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .poller import Poller
-from .store import Store
+from .store import Store, resolve_db_path
 
-DB_PATH = os.environ.get("WIFI_PRESENCE_DB", "wifi_presence.db")
+DB_PATH = resolve_db_path(os.environ.get("WIFI_PRESENCE_DB"))
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 
 # Settings keys that must never be returned to the client.

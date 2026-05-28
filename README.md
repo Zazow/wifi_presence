@@ -57,8 +57,13 @@ connected, devices appear under **Devices** — assign each phone to a **Person*
 (create people there or in the **People** tab), and **Ignore** the clutter
 (IoT, etc.). The **Dashboard** then shows live home/away status.
 
-Settings:
-- `WIFI_PRESENCE_DB` env var sets the SQLite path (default `wifi_presence.db`).
+Data & settings:
+- All settings and device↔person mappings are stored in a SQLite database at a
+  **stable absolute path**: `data/wifi_presence.db` (next to the project). This
+  is what survives restarts — back up this file to preserve your config.
+- Override the location with the `WIFI_PRESENCE_DB` env var (recommended for
+  systemd; see the unit below). The path is resolved absolutely, so the server
+  always opens the same database no matter which directory you launch it from.
 
 ### Run as a service (systemd, on a Pi/server)
 
