@@ -87,7 +87,7 @@ sudo systemctl enable --now wifi-presence
 One command runs both the backend (auto-reload) and the Vite dev server:
 
 ```bash
-./dev.sh              # then open http://localhost:5173  (Ctrl+C stops both)
+./dev.sh              # then open http://localhost:5280  (Ctrl+C stops both)
 ```
 
 Vite proxies `/api` and the WebSocket to the backend on :8000, so the UI hot-

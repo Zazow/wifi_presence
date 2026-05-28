@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run backend (FastAPI, auto-reload) and frontend (Vite dev server) together.
-# Open http://localhost:5173 — Vite proxies /api and the WebSocket to :8000.
+# Open http://localhost:5280 — Vite proxies /api and the WebSocket to :8000.
 # Ctrl+C stops both.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -38,5 +38,5 @@ echo "Starting frontend dev server …"
 pids+=($!)
 
 echo "Backend:  http://localhost:$BACKEND_PORT"
-echo "Frontend: http://localhost:5173  <-- open this"
+echo "Frontend: http://localhost:5280  <-- open this"
 wait
