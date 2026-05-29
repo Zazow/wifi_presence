@@ -1,15 +1,26 @@
+import json
 import time
+from pathlib import Path
 
-from backend.store import DEFAULT_DB_PATH, Store, resolve_db_path
+from backend.store import (
+    DEFAULT_DB_PATH,
+    PROJECT_ROOT,
+    Store,
+    resolve_db_path,
+)
 
 
-def test_default_db_path_is_absolute_and_cwd_independent():
+def test_default_db_path_lives_outside_the_repo():
+    # The production DB must NOT live inside the project working tree, or dev /
+    # test / cleanup activity (rm, git clean) can delete the user's real data.
     p = resolve_db_path(None)
     assert p.is_absolute()
     assert p == DEFAULT_DB_PATH
     assert p.name == "wifi_presence.db"
-    # Lives in a dedicated data dir, not as a stray file at an arbitrary cwd.
-    assert p.parent.name == "data"
+    # Not under the repo.
+    assert PROJECT_ROOT not in p.parents, f"{p} is inside the repo at {PROJECT_ROOT}"
+    # In a dedicated per-user app directory.
+    assert p.parent.name == "wifi-presence"
 
 
 def test_db_path_override_resolves_absolute():
@@ -81,3 +92,58 @@ def test_enrichment_not_wiped_by_missing_values(tmp_path):
     dev = s.get_device("a")
     assert dev["hostname"] == "phone"
     assert dev["ip"] == "192.168.1.5"
+
+
+# ---- config backup / restore -------------------------------------------------
+def test_backup_written_next_to_db_on_change(tmp_path):
+    s = Store(tmp_path / "test.db")
+    p = s.create_person("Brother")
+    s.update_settings({"router_host": "10.0.0.9", "router_password": "secret"})
+    s.record_observations([{"mac": "aa:bb"}], time.time())
+    s.update_device("aa:bb", {"person_id": p["id"], "label": "iPhone"})
+
+    backup = tmp_path / "wifi-presence-config-backup.json"
+    assert backup.exists(), "a config backup should be written beside the DB"
+    data = json.loads(backup.read_text())
+    assert data["settings"]["router_host"] == "10.0.0.9"
+    assert data["settings"]["router_password"] == "secret"  # full restore
+    assert "Brother" in [pp["name"] for pp in data["people"]]
+    mapping = {m["mac"]: m for m in data["device_map"]}
+    assert mapping["aa:bb"]["person_name"] == "Brother"
+    assert mapping["aa:bb"]["label"] == "iPhone"
+
+
+def test_fresh_db_restores_from_backup(tmp_path):
+    # Configure, then simulate the DB file being lost while the backup survives.
+    db = tmp_path / "test.db"
+    s = Store(db)
+    p = s.create_person("Mom")
+    s.update_settings({"router_host": "10.0.0.5", "router_password": "pw"})
+    s.record_observations([{"mac": "cc:dd"}], time.time())
+    s.update_device("cc:dd", {"person_id": p["id"], "label": "iPad", "ignored": True})
+    s.close()
+
+    db.unlink()  # DB gone; backup json remains beside it
+    s2 = Store(db)  # fresh DB -> should auto-restore from backup
+    assert s2.get_settings()["router_host"] == "10.0.0.5"
+    assert s2.get_settings()["router_password"] == "pw"
+    people = {pp["name"]: pp["id"] for pp in s2.list_people()}
+    assert "Mom" in people
+    dev = s2.get_device("cc:dd")
+    assert dev["person_id"] == people["Mom"]
+    assert dev["label"] == "iPad"
+    assert dev["ignored"] == 1
+
+
+def test_no_restore_when_db_already_has_data(tmp_path):
+    # An existing populated DB must never be overwritten by an older backup.
+    db = tmp_path / "test.db"
+    s = Store(db)
+    s.update_settings({"router_host": "1.1.1.1"})
+    s.close()
+    # Hand-write a stale backup with different data.
+    (tmp_path / "wifi-presence-config-backup.json").write_text(
+        json.dumps({"settings": {"router_host": "9.9.9.9"}, "people": [], "device_map": []})
+    )
+    s2 = Store(db)  # DB already existed and has data -> keep it
+    assert s2.get_settings()["router_host"] == "1.1.1.1"

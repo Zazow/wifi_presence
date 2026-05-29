@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -17,6 +18,9 @@ from .store import Store, resolve_db_path
 
 DB_PATH = resolve_db_path(os.environ.get("WIFI_PRESENCE_DB"))
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
+# Surface where data is stored so the user always knows (and can back it up).
+logging.getLogger("uvicorn.error").info("wifi-presence database: %s", DB_PATH)
 
 # Settings keys that must never be returned to the client.
 _SECRET_KEYS = {"router_password"}

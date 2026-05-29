@@ -4,7 +4,7 @@
     {
       "name": "wifi-presence",
       "runtimeExecutable": "bash",
-      "runtimeArgs": ["-c", "WIFI_PRESENCE_DB=test_run.db .venv/bin/python -m uvicorn backend.app:app --port 8077"],
+      "runtimeArgs": ["-c", "WIFI_PRESENCE_DB=/tmp/wifi-presence-preview.db .venv/bin/python -m uvicorn backend.app:app --port 8077"],
       "port": 8077
     }
   ]

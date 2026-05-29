@@ -58,9 +58,15 @@ connected, devices appear under **Devices** — assign each phone to a **Person*
 (IoT, etc.). The **Dashboard** then shows live home/away status.
 
 Data & settings:
-- All settings and device↔person mappings are stored in a SQLite database at a
-  **stable absolute path**: `data/wifi_presence.db` (next to the project). This
-  is what survives restarts — back up this file to preserve your config.
+- All settings and device↔person mappings are stored in a SQLite database in a
+  **per-user data directory, outside the project**:
+  `~/.local/share/wifi-presence/wifi_presence.db` (or `$XDG_DATA_HOME`). It lives
+  outside the repo on purpose, so deleting/cleaning the project directory can
+  never wipe your config. The server logs the exact path on startup.
+- A human-readable **config backup** (`wifi-presence-config-backup.json`) is
+  written next to the database every time settings, people, or device mappings
+  change. If the database is ever lost, the next start **automatically restores**
+  your router credentials, access points, people, and device mappings from it.
 - Override the location with the `WIFI_PRESENCE_DB` env var (recommended for
   systemd; see the unit below). The path is resolved absolutely, so the server
   always opens the same database no matter which directory you launch it from.
@@ -75,7 +81,8 @@ After=network-online.target
 
 [Service]
 WorkingDirectory=/path/to/wifi_presence
-Environment=WIFI_PRESENCE_DB=/path/to/wifi_presence/wifi_presence.db
+# Store data outside the repo so updates/cleanup can't wipe it:
+Environment=WIFI_PRESENCE_DB=/var/lib/wifi-presence/wifi_presence.db
 ExecStart=/path/to/wifi_presence/.venv/bin/python -m uvicorn backend.app:app --host 0.0.0.0 --port 8000
 Restart=always
 

@@ -6,6 +6,7 @@ restarts because they live in this database file.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 import time
@@ -65,21 +66,31 @@ CREATE TABLE IF NOT EXISTS settings (
 """
 
 
-# The database lives in a dedicated data/ directory next to the project, at a
-# stable ABSOLUTE path. This matters: a relative path would resolve against the
-# current working directory, so launching the server from a different folder
-# would silently open a *different* (empty) database and appear to "wipe" all
-# saved settings and device mappings. It also keeps the DB out of the way of
-# stray-file cleanup.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_DB_PATH = PROJECT_ROOT / "data" / "wifi_presence.db"
+
+# The production database lives in a per-user application data directory,
+# OUTSIDE the project working tree. This is deliberate and important:
+#   - A relative path would resolve against the current working directory, so
+#     launching from a different folder would open a different (empty) DB.
+#   - Keeping it inside the repo (e.g. ./data) means routine development and
+#     verification activity — `rm` cleanups, `git clean -fdx`, deleting the repo
+#     — silently destroys the user's real settings and device mappings.
+# So we default to ~/.local/share/wifi-presence/ (or $XDG_DATA_HOME), which
+# nothing in the dev/test/cleanup workflow ever touches.
+def _default_data_dir() -> Path:
+    xdg = os.environ.get("XDG_DATA_HOME")
+    base = Path(xdg) if xdg else Path.home() / ".local" / "share"
+    return base / "wifi-presence"
+
+
+DEFAULT_DB_PATH = _default_data_dir() / "wifi_presence.db"
 
 
 def resolve_db_path(override: str | None = None) -> Path:
     """Resolve the database path to a stable absolute location.
 
     `override` (e.g. from the WIFI_PRESENCE_DB env var) wins when set; otherwise
-    we use the project's data/ directory.
+    we use the per-user application data directory (outside the repo).
     """
     if override:
         return Path(override).expanduser().resolve()
@@ -93,8 +104,15 @@ def _now() -> float:
 class Store:
     def __init__(self, path: str | Path = DEFAULT_DB_PATH):
         self.path = str(path)
-        # Make sure the parent directory exists (e.g. the data/ dir on first run).
-        Path(self.path).parent.mkdir(parents=True, exist_ok=True)
+        db_path = Path(self.path)
+        # Whether the DB file existed BEFORE we open it. A brand-new file means
+        # we may be able to auto-restore the user's config from a backup.
+        existed = db_path.exists()
+        # A human-readable config backup lives beside the DB so settings and
+        # device mappings can be recovered even if the DB file is ever lost.
+        self._backup_path = db_path.parent / "wifi-presence-config-backup.json"
+        self._restoring = False
+        db_path.parent.mkdir(parents=True, exist_ok=True)
         # check_same_thread=False because the async poller and the request
         # handlers may touch the connection from different threads; we guard
         # with a lock.
@@ -103,6 +121,8 @@ class Store:
         self._conn.execute("PRAGMA foreign_keys = ON")
         self._lock = threading.Lock()
         self._init_schema()
+        if not existed:
+            self._restore_from_backup_if_present()
 
     def _init_schema(self) -> None:
         with self._lock:
@@ -140,6 +160,7 @@ class Store:
                     (key, json.dumps(value)),
                 )
             self._conn.commit()
+        self._write_backup()
         return self.get_settings()
 
     # ---- people -----------------------------------------------------------
@@ -161,6 +182,7 @@ class Store:
             row = self._conn.execute(
                 "SELECT * FROM people WHERE id = ?", (pid,)
             ).fetchone()
+        self._write_backup()
         return dict(row)
 
     def rename_person(self, person_id: int, name: str) -> Optional[dict[str, Any]]:
@@ -172,6 +194,7 @@ class Store:
             row = self._conn.execute(
                 "SELECT * FROM people WHERE id = ?", (person_id,)
             ).fetchone()
+        self._write_backup()
         return dict(row) if row else None
 
     def delete_person(self, person_id: int) -> None:
@@ -179,6 +202,7 @@ class Store:
             # ON DELETE SET NULL unassigns the devices.
             self._conn.execute("DELETE FROM people WHERE id = ?", (person_id,))
             self._conn.commit()
+        self._write_backup()
 
     # ---- devices ----------------------------------------------------------
     def list_devices(self) -> list[dict[str, Any]]:
@@ -200,7 +224,90 @@ class Store:
                 f"UPDATE devices SET {assignments} WHERE mac = ?", params
             )
             self._conn.commit()
+        self._write_backup()
         return self.get_device(mac)
+
+    # ---- config backup / restore -----------------------------------------
+    def _export_config(self) -> dict[str, Any]:
+        """Serialize the precious, hard-to-recreate config: settings, people,
+        and device mappings (assignment / label / ignore). Transient presence
+        data is intentionally excluded."""
+        people = [{"id": p["id"], "name": p["name"]} for p in self.list_people()]
+        id_to_name = {p["id"]: p["name"] for p in people}
+        device_map = []
+        for d in self.list_devices():
+            if d.get("person_id") is not None or d.get("label") or d.get("ignored"):
+                device_map.append(
+                    {
+                        "mac": d["mac"],
+                        "label": d.get("label"),
+                        "ignored": bool(d.get("ignored")),
+                        "person_name": id_to_name.get(d.get("person_id")),
+                    }
+                )
+        return {
+            "settings": self.get_settings(),
+            "people": people,
+            "device_map": device_map,
+        }
+
+    def _write_backup(self) -> None:
+        """Best-effort atomic write of the config backup beside the DB. Never
+        raises — a backup failure must not break a real write. Suppressed while
+        restoring so we don't clobber the file we're reading from."""
+        if self._restoring:
+            return
+        try:
+            data = json.dumps(self._export_config(), indent=2)
+            self._backup_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self._backup_path.with_suffix(".json.tmp")
+            tmp.write_text(data)
+            tmp.replace(self._backup_path)  # atomic on POSIX
+        except Exception:
+            pass
+
+    def _restore_from_backup_if_present(self) -> None:
+        """On a brand-new DB, repopulate config from the backup if one exists."""
+        if not self._backup_path.exists():
+            return
+        try:
+            data = json.loads(self._backup_path.read_text())
+        except Exception:
+            return
+        self.import_config(data)
+
+    def import_config(self, data: dict[str, Any]) -> None:
+        self._restoring = True
+        try:
+            settings = data.get("settings") or {}
+            known = {k: settings[k] for k in settings if k in DEFAULT_SETTINGS}
+            if known:
+                self.update_settings(known)
+            name_to_id: dict[str, int] = {}
+            for p in data.get("people") or []:
+                name_to_id[p["name"]] = self.create_person(p["name"])["id"]
+            for m in data.get("device_map") or []:
+                mac = m.get("mac")
+                if not mac:
+                    continue
+                with self._lock:
+                    self._conn.execute(
+                        "INSERT OR IGNORE INTO devices(mac, is_present) VALUES (?, 0)",
+                        (mac,),
+                    )
+                    self._conn.commit()
+                fields: dict[str, Any] = {}
+                if m.get("label") is not None:
+                    fields["label"] = m["label"]
+                if m.get("ignored"):
+                    fields["ignored"] = True
+                pid = name_to_id.get(m.get("person_name"))
+                if pid is not None:
+                    fields["person_id"] = pid
+                if fields:
+                    self.update_device(mac, fields)
+        finally:
+            self._restoring = False
 
     def get_device(self, mac: str) -> Optional[dict[str, Any]]:
         with self._lock:
