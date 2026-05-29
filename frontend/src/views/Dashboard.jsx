@@ -1,5 +1,6 @@
 import React from "react";
 import { timeAgo, deviceName } from "../util.js";
+import RefreshButton from "../components/RefreshButton.jsx";
 
 export default function Dashboard({ state }) {
   if (!state) return <div className="loading">Connecting…</div>;
@@ -18,6 +19,8 @@ export default function Dashboard({ state }) {
         <div className="summary-sep" />
         <div className="summary-num muted">{away.length}</div>
         <div className="summary-label">away</div>
+        <div className="summary-spacer" />
+        <RefreshButton />
       </div>
 
       {status.last_error && (
@@ -68,7 +71,7 @@ export default function Dashboard({ state }) {
             {unassigned.map((d) => (
               <span className="chip" key={d.mac} title={d.mac}>
                 {deviceName(d)}
-                {d.vendor ? ` · ${d.vendor}` : ""}
+                {d.ap ? ` · ${d.ap}` : d.vendor ? ` · ${d.vendor}` : ""}
               </span>
             ))}
           </div>
@@ -97,8 +100,13 @@ function PersonCard({ person, home }) {
       </div>
       <div className="person-devices">
         {(person.devices || []).map((d) => (
-          <span key={d.mac} className={`mini ${d.active ? "on" : "off"}`}>
+          <span
+            key={d.mac}
+            className={`mini ${d.active ? "on" : "off"}`}
+            title={d.ap ? `on ${d.ap}` : ""}
+          >
             {deviceName(d)}
+            {d.active && d.ap ? ` · ${d.ap}` : ""}
           </span>
         ))}
         {(person.devices || []).length === 0 && (

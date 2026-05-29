@@ -26,6 +26,7 @@ export const api = {
   getSettings: () => req("GET", "/api/settings"),
   putSettings: (s) => req("PUT", "/api/settings", s),
   testRouter: () => req("POST", "/api/router/test"),
+  refresh: () => req("POST", "/api/refresh"),
 };
 
 // Subscribe to live state pushes. Auto-reconnects. Returns a cleanup fn.

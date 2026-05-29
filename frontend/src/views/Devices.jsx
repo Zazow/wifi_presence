@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { timeAgo, deviceName } from "../util.js";
+import RefreshButton from "../components/RefreshButton.jsx";
 
 export default function Devices() {
   const [devices, setDevices] = useState([]);
@@ -52,7 +53,10 @@ export default function Devices() {
             </button>
           ))}
         </div>
-        <span className="muted small">{visible.length} shown</span>
+        <div className="toolbar-right">
+          <span className="muted small">{visible.length} shown</span>
+          <RefreshButton onDone={refresh} />
+        </div>
       </div>
 
       <table className="grid">
@@ -60,6 +64,7 @@ export default function Devices() {
           <tr>
             <th>Device</th>
             <th>Vendor</th>
+            <th>AP</th>
             <th>IP</th>
             <th>Last seen</th>
             <th>Person</th>
@@ -77,6 +82,7 @@ export default function Devices() {
                 <div className="muted mono small">{d.mac}</div>
               </td>
               <td>{d.vendor || "—"}</td>
+              <td className="small">{d.ap || (d.is_present ? "behind AP" : "—")}</td>
               <td className="mono small">{d.ip || "—"}</td>
               <td className="small">{timeAgo(d.last_seen)}</td>
               <td>
@@ -108,7 +114,7 @@ export default function Devices() {
           ))}
           {visible.length === 0 && (
             <tr>
-              <td colSpan={6} className="muted center">
+              <td colSpan={7} className="muted center">
                 No devices in this view.
               </td>
             </tr>

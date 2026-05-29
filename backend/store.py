@@ -28,6 +28,12 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Bridge forwarding table — finds devices behind APs / AiMesh nodes.
     # Empty string disables it (wifi-only via assoclist).
     "cmd_fdb": "brctl showmacs br0 2>/dev/null",
+    # Friendly name for the main router (shown as the AP for its own clients).
+    "router_name": "Main router",
+    # Extra access points to poll for client attribution. Each entry:
+    #   {"name", "host", "port", "user", "password", "key_path"}
+    # Empty fields fall back to the main router's credentials.
+    "access_points": [],
 }
 
 SCHEMA = """
@@ -43,6 +49,7 @@ CREATE TABLE IF NOT EXISTS devices (
     ip TEXT,
     vendor TEXT,
     interface TEXT,
+    ap TEXT,
     label TEXT,
     person_id INTEGER REFERENCES people(id) ON DELETE SET NULL,
     ignored INTEGER NOT NULL DEFAULT 0,
@@ -100,12 +107,20 @@ class Store:
     def _init_schema(self) -> None:
         with self._lock:
             self._conn.executescript(SCHEMA)
+            self._migrate()
             for key, value in DEFAULT_SETTINGS.items():
                 self._conn.execute(
                     "INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)",
                     (key, json.dumps(value)),
                 )
             self._conn.commit()
+
+    def _migrate(self) -> None:
+        """Add columns introduced after the first release, without touching
+        existing rows (so upgrades never wipe saved data)."""
+        cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(devices)")}
+        if "ap" not in cols:
+            self._conn.execute("ALTER TABLE devices ADD COLUMN ap TEXT")
 
     # ---- settings ---------------------------------------------------------
     def get_settings(self) -> dict[str, Any]:
@@ -212,28 +227,32 @@ class Store:
                 ).fetchone()
                 if existing is None:
                     self._conn.execute(
-                        "INSERT INTO devices(mac, hostname, ip, vendor, interface, "
+                        "INSERT INTO devices(mac, hostname, ip, vendor, interface, ap, "
                         "first_seen, last_seen, is_present) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)",
                         (
                             mac,
                             o.get("hostname"),
                             o.get("ip"),
                             o.get("vendor"),
                             o.get("interface"),
+                            o.get("ap"),
                             seen_at,
                             seen_at,
                         ),
                     )
                 else:
                     # Only overwrite enrichment fields when we have a value, so
-                    # a momentarily missing hostname/ip doesn't wipe a good one.
+                    # a momentarily missing hostname/ip/ap doesn't wipe a good one.
+                    # (ap stays last-known when this cycle only saw the device via
+                    # the bridge table and couldn't attribute it to an AP.)
                     self._conn.execute(
                         "UPDATE devices SET "
                         "hostname = COALESCE(?, hostname), "
                         "ip = COALESCE(?, ip), "
                         "vendor = COALESCE(?, vendor), "
                         "interface = COALESCE(?, interface), "
+                        "ap = COALESCE(?, ap), "
                         "last_seen = ?, is_present = 1 "
                         "WHERE mac = ?",
                         (
@@ -241,6 +260,7 @@ class Store:
                             o.get("ip"),
                             o.get("vendor"),
                             o.get("interface"),
+                            o.get("ap"),
                             seen_at,
                             mac,
                         ),

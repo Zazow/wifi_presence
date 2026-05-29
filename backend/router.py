@@ -123,6 +123,46 @@ def parse_fdb(output: str) -> set[str]:
     return macs
 
 
+def overlay_aps(
+    observations: list[dict[str, Any]],
+    ap_associated: dict[str, dict[str, str]],
+    router_name: str,
+) -> list[dict[str, Any]]:
+    """Attribute each observation to the access point it's connected to.
+
+    - Devices associated to one of the main router's own radios (interface set
+      by `merge_observations`) get `ap = router_name`.
+    - Devices found in a configured AP's association list get `ap = <AP name>`
+      (this wins — it's where the device physically is).
+    - Everything else (seen only via the bridge table) keeps `ap = None`
+      ("behind an AP", which one unknown).
+
+    `ap_associated` maps AP name -> {mac: interface}. Pure function.
+    """
+    by_mac: dict[str, dict[str, Any]] = {}
+    for o in observations:
+        item = dict(o)
+        item.setdefault("ap", None)
+        if item.get("interface") is not None and item["ap"] is None:
+            item["ap"] = router_name
+        by_mac[item["mac"]] = item
+
+    for name, assoc in ap_associated.items():
+        for mac, iface in assoc.items():
+            item = by_mac.get(mac)
+            if item is None:
+                item = {
+                    "mac": mac,
+                    "ip": None,
+                    "hostname": None,
+                    "vendor": lookup_vendor(mac),
+                }
+                by_mac[mac] = item
+            item["interface"] = iface
+            item["ap"] = name
+    return list(by_mac.values())
+
+
 def merge_observations(
     present: dict[str, Optional[str]],
     ip_by_mac: dict[str, str],
@@ -209,6 +249,15 @@ class RouterClient:
         _stdin, stdout, _stderr = client.exec_command(command, timeout=15)
         return stdout.read().decode("utf-8", "replace")
 
+    def _associated(self, client: "paramiko.SSHClient", s: dict[str, Any]) -> dict[str, str]:
+        """{mac: interface} for clients associated to this device's own radios."""
+        ifaces = self._run(client, s["cmd_ifnames"]).split()
+        associated: dict[str, str] = {}
+        for iface in ifaces:
+            cmd = s["cmd_assoclist"].format(iface=iface)
+            associated.update(parse_assoclist(self._run(client, cmd), iface))
+        return associated
+
     def fetch_clients(self) -> list[dict[str, Any]]:
         """Run the discovery commands and return normalized observations.
 
@@ -218,13 +267,7 @@ class RouterClient:
             client = self._ensure_connection()
             s = self.settings
 
-            ifnames_out = self._run(client, s["cmd_ifnames"])
-            ifaces = ifnames_out.split()
-
-            associated: dict[str, str] = {}
-            for iface in ifaces:
-                cmd = s["cmd_assoclist"].format(iface=iface)
-                associated.update(parse_assoclist(self._run(client, cmd), iface))
+            associated = self._associated(client, s)
 
             # Bridge table catches devices behind APs / AiMesh nodes / switches
             # that never associate to the main router's own radios.
@@ -240,6 +283,14 @@ class RouterClient:
         present: dict[str, Optional[str]] = {m: None for m in fdb_macs}
         present.update(associated)
         return merge_observations(present, ip_by_mac, host_by_mac)
+
+    def fetch_associated(self) -> dict[str, str]:
+        """{mac: interface} for an access point — used to attribute clients to
+        the AP they're connected to. Lighter than fetch_clients (no FDB/leases).
+        """
+        with self._lock:
+            client = self._ensure_connection()
+            return self._associated(client, self.settings)
 
     def test_connection(self) -> dict[str, Any]:
         """Used by the Settings 'Test connection' button."""

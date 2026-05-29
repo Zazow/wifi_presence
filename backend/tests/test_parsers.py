@@ -1,5 +1,6 @@
 from backend.router import (
     merge_observations,
+    overlay_aps,
     parse_assoclist,
     parse_fdb,
     parse_leases,
@@ -89,3 +90,26 @@ def test_merge_observations_ap_device_has_no_interface():
     obs = merge_observations(present, {}, {"aa:bb:cc:dd:ee:ff": "Phone"})
     assert obs[0]["interface"] is None
     assert obs[0]["hostname"] == "Phone"
+
+
+def test_overlay_aps_attributes_main_and_ap():
+    observations = [
+        # associated to the main router (interface set)
+        {"mac": "aa:aa:aa:aa:aa:aa", "interface": "eth6", "ip": None,
+         "hostname": None, "vendor": "Apple"},
+        # seen only via bridge table (behind some AP, interface None)
+        {"mac": "bb:bb:bb:bb:bb:bb", "interface": None, "ip": None,
+         "hostname": None, "vendor": None},
+    ]
+    ap_assoc = {"Upstairs": {"bb:bb:bb:bb:bb:bb": "eth7"}}
+    out = {o["mac"]: o for o in overlay_aps(observations, ap_assoc, "Main router")}
+    assert out["aa:aa:aa:aa:aa:aa"]["ap"] == "Main router"
+    assert out["bb:bb:bb:bb:bb:bb"]["ap"] == "Upstairs"
+    assert out["bb:bb:bb:bb:bb:bb"]["interface"] == "eth7"
+
+
+def test_overlay_aps_adds_ap_only_device():
+    # Device the AP sees but the main router didn't report at all.
+    out = overlay_aps([], {"Garage": {"cc:cc:cc:cc:cc:cc": "eth6"}}, "Main router")
+    assert out[0]["mac"] == "cc:cc:cc:cc:cc:cc"
+    assert out[0]["ap"] == "Garage"

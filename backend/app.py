@@ -89,12 +89,21 @@ class SettingsIn(BaseModel):
     cmd_neigh: Optional[str] = None
     cmd_leases: Optional[str] = None
     cmd_fdb: Optional[str] = None
+    router_name: Optional[str] = None
+    access_points: Optional[list[dict[str, Any]]] = None
 
 
 def _redact(settings: dict[str, Any]) -> dict[str, Any]:
     out = dict(settings)
     for k in _SECRET_KEYS:
         out[k] = "********" if out.get(k) else ""
+    # Redact per-AP passwords too.
+    aps = []
+    for ap in out.get("access_points") or []:
+        ap = dict(ap)
+        ap["password"] = "********" if ap.get("password") else ""
+        aps.append(ap)
+    out["access_points"] = aps
     return out
 
 
@@ -177,9 +186,24 @@ def put_settings(settings: SettingsIn) -> dict[str, Any]:
     # Never store the redaction placeholder back as the real password.
     if updates.get("router_password") == "********":
         updates.pop("router_password")
+    # Same for per-AP passwords: a "********" placeholder means "unchanged".
+    if "access_points" in updates:
+        existing = {
+            ap.get("name"): ap.get("password")
+            for ap in store.get_settings().get("access_points") or []
+        }
+        for ap in updates["access_points"]:
+            if ap.get("password") == "********":
+                ap["password"] = existing.get(ap.get("name"), "")
     store.update_settings(updates)
     poller.reload_router_settings()
     return _redact(store.get_settings())
+
+
+@app.post("/api/refresh")
+async def refresh() -> dict[str, Any]:
+    """Force an immediate poll cycle (manual refresh button)."""
+    return await poller.poll_now()
 
 
 @app.post("/api/router/test")
