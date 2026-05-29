@@ -61,6 +61,30 @@ def test_poll_cycle_survives_router_error(tmp_path):
     assert captured and captured[-1] is state
 
 
+def test_test_all_covers_main_and_each_ap(tmp_path):
+    store = Store(tmp_path / "t.db")
+    store.update_settings(
+        {
+            "router_host": "127.0.0.1",
+            "router_port": 9,  # nothing listening -> fast, deterministic failure
+            "router_name": "Main",
+            "access_points": [
+                {"name": "Upstairs", "host": "127.0.0.1", "port": 9,
+                 "user": "", "password": "", "key_path": ""}
+            ],
+        }
+    )
+
+    async def bcast(state):
+        pass
+
+    p = Poller(store, bcast)
+    out = asyncio.run(p.test_all())
+    names = {r["name"] for r in out["results"]}
+    assert names == {"Main", "Upstairs"}  # main router + the AP both tested
+    assert all(r["ok"] is False and r["stage"] == "tcp" for r in out["results"])
+
+
 def test_poll_cycle_survives_broadcast_error(tmp_path):
     # A throwing broadcast must not propagate out of a cycle and kill the loop.
     store = Store(tmp_path / "t.db")

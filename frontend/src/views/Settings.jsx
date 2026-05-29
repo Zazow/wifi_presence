@@ -158,11 +158,18 @@ export default function Settings() {
         {saved && <span className="ok">Saved ✓</span>}
       </div>
 
-      {test && (
-        <div className={`banner ${test.ok ? "success" : test.status ? "" : "error"}`}>
-          {test.status === "testing" && "Testing…"}
-          {test.ok && `Connected. Wireless interfaces: ${test.interfaces.join(", ") || "none found"}`}
-          {test.ok === false && `Failed: ${test.error}`}
+      {test?.status === "testing" && <div className="banner">Testing…</div>}
+
+      {test?.results && (
+        <div className="test-results">
+          {test.results.map((r) => (
+            <div key={r.name} className={`banner ${r.ok ? "success" : "error"}`}>
+              <strong>{r.name}</strong>{" — "}
+              {r.ok
+                ? `connected (interfaces: ${(r.interfaces || []).join(", ") || "none found"})`
+                : r.error}
+            </div>
+          ))}
         </div>
       )}
     </form>

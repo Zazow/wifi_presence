@@ -165,3 +165,5 @@ button.link.danger { color: var(--danger); }
 .ap-row .link.danger { padding-bottom: 9px; }
 .actions { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
 .actions .ok { color: var(--green); }
+.test-results { display: flex; flex-direction: column; gap: 8px; }
+.test-results .banner { margin: 0; }

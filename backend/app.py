@@ -211,9 +211,9 @@ async def refresh() -> dict[str, Any]:
 
 
 @app.post("/api/router/test")
-def test_router() -> dict[str, Any]:
-    poller.reload_router_settings()
-    return poller.router.test_connection()
+async def test_router() -> dict[str, Any]:
+    """Test the main router and every configured access point."""
+    return await poller.test_all()
 
 
 # ---- static SPA ----------------------------------------------------------

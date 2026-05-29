@@ -73,6 +73,27 @@ class Poller:
         )
         return dict(results)
 
+    async def test_all(self) -> dict[str, Any]:
+        """Test the main router AND every configured AP, concurrently.
+
+        Returns {"results": [{name, ok, stage?, interfaces?/error?}, ...]} so the
+        Settings UI can show which targets connect and which don't.
+        """
+        self.reload_router_settings()
+        settings = self.store.get_settings()
+
+        async def run(name: str, client: RouterClient) -> dict[str, Any]:
+            result = await asyncio.to_thread(client.test_connection)
+            result["name"] = name
+            return result
+
+        targets: list[tuple[str, RouterClient]] = [
+            (settings.get("router_name", "Main router"), self.router)
+        ]
+        targets += list(self.ap_clients.items())
+        results = await asyncio.gather(*(run(n, c) for n, c in targets))
+        return {"results": list(results)}
+
     async def start(self) -> None:
         self._stop.clear()
         self._task = asyncio.create_task(self._loop())
