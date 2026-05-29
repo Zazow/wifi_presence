@@ -13,6 +13,7 @@ wifi). ARP/neighbour and DHCP leases only enrich IP and hostname.
 from __future__ import annotations
 
 import re
+import socket
 import threading
 from typing import Any, Optional
 
@@ -189,6 +190,24 @@ def merge_observations(
     return observations
 
 
+def tcp_check(host: str, port: int, timeout: float = 5.0) -> tuple[bool, Optional[str]]:
+    """Can we open a TCP connection to host:port? Returns (ok, error_message).
+
+    This separates "the host/port is unreachable" (network, firewall, wrong
+    port, or the router's SSH brute-force protection silently dropping us) from
+    "we reached SSH but login/commands failed". A plain `TimeoutError: timed
+    out` from paramiko means this layer failed — the credentials were never
+    even tried.
+    """
+    if not host:
+        return False, "no host configured"
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True, None
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"
+
+
 # ---- live SSH client -----------------------------------------------------
 class RouterClient:
     def __init__(self, settings: dict[str, Any]):
@@ -293,12 +312,48 @@ class RouterClient:
             return self._associated(client, self.settings)
 
     def test_connection(self) -> dict[str, Any]:
-        """Used by the Settings 'Test connection' button."""
+        """Used by the Settings 'Test connection' button.
+
+        Probes in layers so the message says WHERE it failed:
+        TCP reachability -> SSH/auth -> command. A bare "timed out" almost
+        always means the TCP layer — the router is unreachable from this
+        machine, the port is wrong/closed, or (common on ASUS) SSH brute-force
+        protection has temporarily blocked this device's IP.
+        """
+        s = self.settings
+        host = s.get("router_host", "")
+        port = int(s.get("router_port", 22))
+
+        ok, err = tcp_check(host, port, timeout=5.0)
+        if not ok:
+            return {
+                "ok": False,
+                "stage": "tcp",
+                "error": (
+                    f"Can't reach {host}:{port} ({err}). The router is "
+                    f"unreachable from this machine, the SSH port is wrong or "
+                    f"closed, or the router's SSH brute-force protection has "
+                    f"temporarily blocked this device."
+                ),
+            }
+
+        auth_exc = getattr(paramiko, "AuthenticationException", ()) if paramiko else ()
         try:
             with self._lock:
                 client = self._ensure_connection()
-                ifnames_out = self._run(client, self.settings["cmd_ifnames"])
-            ifaces = ifnames_out.split()
-            return {"ok": True, "interfaces": ifaces}
-        except Exception as e:  # surface a readable error to the UI
-            return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+                ifnames_out = self._run(client, s["cmd_ifnames"])
+            return {"ok": True, "interfaces": ifnames_out.split()}
+        except auth_exc as e:  # type: ignore[misc]
+            return {
+                "ok": False,
+                "stage": "auth",
+                "error": f"Reached {host}:{port}, but SSH login failed — "
+                f"check the username and password/key. ({e})",
+            }
+        except Exception as e:
+            return {
+                "ok": False,
+                "stage": "ssh",
+                "error": f"Reached {host}:{port}, but the SSH session failed: "
+                f"{type(e).__name__}: {e}",
+            }

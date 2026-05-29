@@ -1,10 +1,14 @@
+import socket
+
 from backend.router import (
+    RouterClient,
     merge_observations,
     overlay_aps,
     parse_assoclist,
     parse_fdb,
     parse_leases,
     parse_neigh,
+    tcp_check,
 )
 
 
@@ -113,3 +117,37 @@ def test_overlay_aps_adds_ap_only_device():
     out = overlay_aps([], {"Garage": {"cc:cc:cc:cc:cc:cc": "eth6"}}, "Main router")
     assert out[0]["mac"] == "cc:cc:cc:cc:cc:cc"
     assert out[0]["ap"] == "Garage"
+
+
+def test_tcp_check_success_on_open_port():
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    port = srv.getsockname()[1]
+    try:
+        ok, err = tcp_check("127.0.0.1", port, timeout=2)
+        assert ok is True and err is None
+    finally:
+        srv.close()
+
+
+def test_tcp_check_failure_on_closed_port():
+    # Reserved discard port that nothing listens on -> connection refused/timeout.
+    ok, err = tcp_check("127.0.0.1", 9, timeout=2)
+    assert ok is False
+    assert err  # carries a reason
+
+
+def test_tcp_check_no_host():
+    ok, err = tcp_check("", 22)
+    assert ok is False
+
+
+def test_test_connection_reports_tcp_stage_when_unreachable():
+    # No SSH server here; test_connection must classify it as a TCP failure
+    # (not auth) and produce an actionable message.
+    client = RouterClient({"router_host": "127.0.0.1", "router_port": 9})
+    result = client.test_connection()
+    assert result["ok"] is False
+    assert result["stage"] == "tcp"
+    assert "Can't reach" in result["error"]
