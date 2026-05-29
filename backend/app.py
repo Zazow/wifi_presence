@@ -8,13 +8,13 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .poller import Poller
-from .store import Store, resolve_db_path
+from .store import Store, match_device_by_ip, resolve_db_path
 
 DB_PATH = resolve_db_path(os.environ.get("WIFI_PRESENCE_DB"))
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
@@ -130,7 +130,32 @@ async def ws_endpoint(ws: WebSocket) -> None:
         await manager.disconnect(ws)
 
 
+def _client_ip(request: Request) -> str:
+    """The requesting client's LAN IP. Honour X-Forwarded-For in case the app
+    sits behind a reverse proxy; otherwise use the socket peer."""
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else ""
+
+
 # ---- devices -------------------------------------------------------------
+@app.get("/api/whoami")
+async def whoami(request: Request) -> dict[str, Any]:
+    """Identify the device the caller is browsing from, by matching its IP to a
+    known device. Powers the 'Register this device' button. If no match, do one
+    fresh poll (to refresh ARP/lease mappings) and try again."""
+    ip = _client_ip(request)
+    device = match_device_by_ip(store.list_devices(), ip)
+    if device is None:
+        try:
+            await poller.poll_now()
+        except Exception:
+            pass
+        device = match_device_by_ip(store.list_devices(), ip)
+    return {"ip": ip, "device": device}
+
+
 @app.get("/api/devices")
 def list_devices() -> list[dict[str, Any]]:
     return store.list_devices()

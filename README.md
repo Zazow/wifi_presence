@@ -125,6 +125,12 @@ reloads while the API stays live.
   show its name; devices behind an unlisted AP show "behind AP".
 - **Refresh:** the Dashboard and Devices views have a Refresh button that forces
   an immediate poll instead of waiting for the next interval.
+- **Register this device:** the fastest way to map devices — a family member
+  opens the page **on their own phone** (on home Wi-Fi) and taps *Register this
+  device*. The app matches their connection's IP to the device and lets them
+  assign it to an existing or new person, with no MAC hunting. (Requires the
+  device to have been seen on the network; works on the LAN, not over mobile
+  data or a VPN.)
 - **MAC randomization:** modern iPhones/Androids use a private MAC per SSID, but
   it's stable on your home wifi — once mapped, a device stays mapped.
 - **Notes on commands:** if your firmware uses different paths, override the

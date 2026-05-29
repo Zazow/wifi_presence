@@ -1,8 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
+import { api } from "../api.js";
 import { timeAgo, deviceName } from "../util.js";
 import RefreshButton from "../components/RefreshButton.jsx";
+import RegisterDeviceModal from "../components/RegisterDeviceModal.jsx";
 
 export default function Dashboard({ state }) {
+  const [showRegister, setShowRegister] = useState(false);
   if (!state) return <div className="loading">Connecting…</div>;
 
   const people = state.people || [];
@@ -20,8 +23,18 @@ export default function Dashboard({ state }) {
         <div className="summary-num muted">{away.length}</div>
         <div className="summary-label">away</div>
         <div className="summary-spacer" />
+        <button className="register-btn" onClick={() => setShowRegister(true)}>
+          + Register this device
+        </button>
         <RefreshButton />
       </div>
+
+      {showRegister && (
+        <RegisterDeviceModal
+          onClose={() => setShowRegister(false)}
+          onDone={() => api.refresh()}
+        />
+      )}
 
       {status.last_error && (
         <div className="banner error">

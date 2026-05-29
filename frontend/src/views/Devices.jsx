@@ -2,12 +2,14 @@ import React, { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { timeAgo, deviceName } from "../util.js";
 import RefreshButton from "../components/RefreshButton.jsx";
+import RegisterDeviceModal from "../components/RegisterDeviceModal.jsx";
 
 export default function Devices() {
   const [devices, setDevices] = useState([]);
   const [people, setPeople] = useState([]);
   const [filter, setFilter] = useState("active"); // active | all | unassigned | ignored
   const [loading, setLoading] = useState(true);
+  const [showRegister, setShowRegister] = useState(false);
 
   async function refresh() {
     const [d, p] = await Promise.all([api.listDevices(), api.listPeople()]);
@@ -55,9 +57,19 @@ export default function Devices() {
         </div>
         <div className="toolbar-right">
           <span className="muted small">{visible.length} shown</span>
+          <button className="register-btn" onClick={() => setShowRegister(true)}>
+            + Register this device
+          </button>
           <RefreshButton onDone={refresh} />
         </div>
       </div>
+
+      {showRegister && (
+        <RegisterDeviceModal
+          onClose={() => setShowRegister(false)}
+          onDone={refresh}
+        />
+      )}
 
       <table className="grid">
         <thead>

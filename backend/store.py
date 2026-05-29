@@ -97,6 +97,17 @@ def resolve_db_path(override: str | None = None) -> Path:
     return DEFAULT_DB_PATH
 
 
+def match_device_by_ip(devices: list[dict[str, Any]], ip: str) -> Optional[dict[str, Any]]:
+    """Find the device whose last-known IP matches `ip`. Used to identify the
+    device a web request came from ('register this device')."""
+    if not ip:
+        return None
+    for d in devices:
+        if d.get("ip") == ip:
+            return d
+    return None
+
+
 def _now() -> float:
     return time.time()
 

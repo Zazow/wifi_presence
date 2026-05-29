@@ -6,8 +6,19 @@ from backend.store import (
     DEFAULT_DB_PATH,
     PROJECT_ROOT,
     Store,
+    match_device_by_ip,
     resolve_db_path,
 )
+
+
+def test_match_device_by_ip():
+    devices = [
+        {"mac": "aa", "ip": "192.168.1.5"},
+        {"mac": "bb", "ip": "192.168.1.6"},
+    ]
+    assert match_device_by_ip(devices, "192.168.1.6")["mac"] == "bb"
+    assert match_device_by_ip(devices, "192.168.1.9") is None
+    assert match_device_by_ip(devices, "") is None
 
 
 def test_default_db_path_lives_outside_the_repo():
