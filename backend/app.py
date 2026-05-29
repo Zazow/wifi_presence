@@ -138,6 +138,22 @@ def _client_ip(request: Request) -> str:
     return normalize_ip(raw)
 
 
+def _server_lan_ip() -> Optional[str]:
+    """Best-effort primary LAN IP of this machine, so the UI can build a
+    'open this on your phone' URL/QR even when viewed on the server itself.
+    Uses a routing-table trick (no packets actually sent, no external call)."""
+    import socket
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except Exception:
+        return None
+    finally:
+        s.close()
+
+
 # ---- devices -------------------------------------------------------------
 @app.get("/api/whoami")
 def whoami(request: Request) -> dict[str, Any]:
@@ -149,7 +165,11 @@ def whoami(request: Request) -> dict[str, Any]:
     would hang for the router timeout. If there's no match the UI offers a
     manual device picker."""
     ip = _client_ip(request)
-    return {"ip": ip, "device": match_device_by_ip(store.list_devices(), ip)}
+    return {
+        "ip": ip,
+        "device": match_device_by_ip(store.list_devices(), ip),
+        "server_ip": _server_lan_ip(),
+    }
 
 
 @app.get("/api/devices")

@@ -108,6 +108,12 @@ section:first-of-type h2 { margin-top: 8px; }
 }
 .detected-name { font-weight: 600; font-size: 16px; }
 .or-sep { margin: -4px 0; }
+.qr-wrap { display: flex; justify-content: center; padding: 8px; }
+.qr-wrap img {
+  width: 220px; height: 220px; image-rendering: pixelated;
+  background: #fff; padding: 10px; border-radius: 10px;
+}
+.qr-url { word-break: break-all; }
 
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
 .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }

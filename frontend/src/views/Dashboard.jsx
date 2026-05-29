@@ -5,7 +5,10 @@ import RefreshButton from "../components/RefreshButton.jsx";
 import RegisterDeviceModal from "../components/RegisterDeviceModal.jsx";
 
 export default function Dashboard({ state }) {
-  const [showRegister, setShowRegister] = useState(false);
+  // Open the register flow automatically when arriving via the QR link.
+  const [showRegister, setShowRegister] = useState(
+    () => new URLSearchParams(location.search).get("register") === "1"
+  );
   if (!state) return <div className="loading">Connecting…</div>;
 
   const people = state.people || [];
