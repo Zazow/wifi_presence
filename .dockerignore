@@ -1,0 +1,16 @@
+# Build context hygiene — keep the image small and builds reproducible.
+.git
+.github
+.venv
+venv
+**/__pycache__
+*.pyc
+.pytest_cache
+node_modules
+frontend/dist
+data
+*.db
+.DS_Store
+docs
+*.md
+.claude

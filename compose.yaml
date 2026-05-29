@@ -1,0 +1,29 @@
+# WiFi Presence — Dockge stack.
+#
+# Paste this into a new Dockge stack (name it "wifi-presence") and deploy.
+# IMPORTANT: replace OWNER below with your GitHub username/org (lowercase), e.g.
+#   image: ghcr.io/ziyad/wifi_presence:latest
+#
+# To update later: push to GitHub (CI rebuilds the image), then in Dockge open
+# this stack and click the update/pull button — it pulls the new image and
+# recreates the container. Your data in the volume is preserved.
+
+services:
+  wifi-presence:
+    image: ghcr.io/OWNER/wifi_presence:latest
+    container_name: wifi-presence
+    # Host networking is important here: it lets the app reach your router on
+    # the LAN AND see each phone's REAL IP address — which is what makes
+    # "Register this device" / the QR flow work. (With bridge networking, every
+    # client would appear to come from the Docker gateway and auto-detect breaks.)
+    network_mode: host
+    environment:
+      WIFI_PRESENCE_DB: /data/wifi_presence.db
+      # Port the app listens on (host networking binds it directly on the host).
+      PORT: "8000"
+    volumes:
+      - wifi_presence_data:/data
+    restart: unless-stopped
+
+volumes:
+  wifi_presence_data:
