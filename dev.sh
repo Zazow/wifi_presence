@@ -37,6 +37,13 @@ echo "Starting frontend dev server …"
 (cd frontend && npm run dev) &
 pids+=($!)
 
-echo "Backend:  http://localhost:$BACKEND_PORT"
-echo "Frontend: http://localhost:5280  <-- open this"
+# Best-effort LAN IP so you can open the UI from a phone on the same network.
+LAN_IP="$(ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')"
+echo "Backend:  http://localhost:$BACKEND_PORT (local only; proxied by the frontend)"
+echo "Frontend (this machine): http://localhost:5280"
+if [ -n "$LAN_IP" ]; then
+  echo "Frontend (phone/LAN):    http://$LAN_IP:5280   <-- open this on your phone"
+else
+  echo "Frontend (phone/LAN):    see the 'Network:' URL Vite prints below"
+fi
 wait
