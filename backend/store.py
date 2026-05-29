@@ -5,6 +5,7 @@ restarts because they live in this database file.
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import sqlite3
@@ -97,9 +98,28 @@ def resolve_db_path(override: str | None = None) -> Path:
     return DEFAULT_DB_PATH
 
 
+def normalize_ip(ip: str) -> str:
+    """Canonicalize a client IP for matching.
+
+    Dual-stack sockets often report IPv4 clients as IPv4-mapped IPv6
+    (e.g. '::ffff:192.168.1.5'); collapse those to plain IPv4 so they match the
+    IPv4 addresses we learn from ARP/DHCP leases.
+    """
+    if not ip:
+        return ip
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return ip
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
+        return str(addr.ipv4_mapped)
+    return str(addr)
+
+
 def match_device_by_ip(devices: list[dict[str, Any]], ip: str) -> Optional[dict[str, Any]]:
     """Find the device whose last-known IP matches `ip`. Used to identify the
     device a web request came from ('register this device')."""
+    ip = normalize_ip(ip)
     if not ip:
         return None
     for d in devices:

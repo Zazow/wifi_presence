@@ -7,6 +7,7 @@ from backend.store import (
     PROJECT_ROOT,
     Store,
     match_device_by_ip,
+    normalize_ip,
     resolve_db_path,
 )
 
@@ -19,6 +20,19 @@ def test_match_device_by_ip():
     assert match_device_by_ip(devices, "192.168.1.6")["mac"] == "bb"
     assert match_device_by_ip(devices, "192.168.1.9") is None
     assert match_device_by_ip(devices, "") is None
+
+
+def test_match_device_by_ipv4_mapped_ipv6():
+    # Dual-stack sockets report IPv4 clients as ::ffff:a.b.c.d — must still match.
+    devices = [{"mac": "aa", "ip": "192.168.1.5"}]
+    assert match_device_by_ip(devices, "::ffff:192.168.1.5")["mac"] == "aa"
+
+
+def test_normalize_ip():
+    assert normalize_ip("::ffff:192.168.1.5") == "192.168.1.5"
+    assert normalize_ip("192.168.1.5") == "192.168.1.5"
+    assert normalize_ip("::1") == "::1"  # loopback stays (server-local)
+    assert normalize_ip("not-an-ip") == "not-an-ip"
 
 
 def test_default_db_path_lives_outside_the_repo():

@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .poller import Poller
-from .store import Store, match_device_by_ip, resolve_db_path
+from .store import Store, match_device_by_ip, normalize_ip, resolve_db_path
 
 DB_PATH = resolve_db_path(os.environ.get("WIFI_PRESENCE_DB"))
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
@@ -134,26 +134,22 @@ def _client_ip(request: Request) -> str:
     """The requesting client's LAN IP. Honour X-Forwarded-For in case the app
     sits behind a reverse proxy; otherwise use the socket peer."""
     xff = request.headers.get("x-forwarded-for")
-    if xff:
-        return xff.split(",")[0].strip()
-    return request.client.host if request.client else ""
+    raw = xff.split(",")[0].strip() if xff else (request.client.host if request.client else "")
+    return normalize_ip(raw)
 
 
 # ---- devices -------------------------------------------------------------
 @app.get("/api/whoami")
-async def whoami(request: Request) -> dict[str, Any]:
+def whoami(request: Request) -> dict[str, Any]:
     """Identify the device the caller is browsing from, by matching its IP to a
-    known device. Powers the 'Register this device' button. If no match, do one
-    fresh poll (to refresh ARP/lease mappings) and try again."""
+    known device. Powers the 'Register this device' button.
+
+    Reads the current device table (kept fresh by the background poller) and
+    returns immediately — it must not block on a live SSH poll, or the button
+    would hang for the router timeout. If there's no match the UI offers a
+    manual device picker."""
     ip = _client_ip(request)
-    device = match_device_by_ip(store.list_devices(), ip)
-    if device is None:
-        try:
-            await poller.poll_now()
-        except Exception:
-            pass
-        device = match_device_by_ip(store.list_devices(), ip)
-    return {"ip": ip, "device": device}
+    return {"ip": ip, "device": match_device_by_ip(store.list_devices(), ip)}
 
 
 @app.get("/api/devices")

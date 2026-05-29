@@ -128,9 +128,9 @@ reloads while the API stays live.
 - **Register this device:** the fastest way to map devices — a family member
   opens the page **on their own phone** (on home Wi-Fi) and taps *Register this
   device*. The app matches their connection's IP to the device and lets them
-  assign it to an existing or new person, with no MAC hunting. (Requires the
-  device to have been seen on the network; works on the LAN, not over mobile
-  data or a VPN.)
+  assign it to an existing or new person, with no MAC hunting. If it can't
+  auto-detect (e.g. opened on the server itself, or IPv6-only), the dialog falls
+  back to a device picker so it always works.
 - **MAC randomization:** modern iPhones/Androids use a private MAC per SSID, but
   it's stable on your home wifi — once mapped, a device stays mapped.
 - **Notes on commands:** if your firmware uses different paths, override the
