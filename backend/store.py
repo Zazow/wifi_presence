@@ -241,6 +241,16 @@ class Store:
             rows = self._conn.execute("SELECT * FROM devices").fetchall()
         return [dict(r) for r in rows]
 
+    def known_wifi_macs(self) -> set[str]:
+        """MACs we've ever seen associate to a polled radio (interface is set).
+        For these, the assoclist is authoritative — a stale bridge-table entry
+        must not keep them 'present'."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT mac FROM devices WHERE interface IS NOT NULL"
+            ).fetchall()
+        return {r["mac"] for r in rows}
+
     def update_device(self, mac: str, fields: dict[str, Any]) -> Optional[dict[str, Any]]:
         allowed = {"label", "person_id", "ignored"}
         sets = {k: v for k, v in fields.items() if k in allowed}

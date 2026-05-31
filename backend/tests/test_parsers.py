@@ -2,13 +2,13 @@ import socket
 
 from backend.router import (
     RouterClient,
-    merge_observations,
-    overlay_aps,
+    build_present,
     parse_assoclist,
     parse_fdb,
     parse_leases,
     parse_neigh,
     tcp_check,
+    to_observations,
 )
 
 
@@ -75,48 +75,63 @@ def test_parse_fdb_iproute2():
     assert result == {"aa:bb:cc:dd:ee:ff", "11:22:33:44:55:66"}
 
 
-def test_merge_observations():
-    present = {"aa:bb:cc:dd:ee:ff": "eth6"}
+def test_to_observations_enriches():
+    present = {"aa:bb:cc:dd:ee:ff": {"interface": "eth6", "ap": "Main router"}}
     ips = {"aa:bb:cc:dd:ee:ff": "192.168.1.23"}
     hosts = {"aa:bb:cc:dd:ee:ff": "Ziyad-iPhone"}
-    obs = merge_observations(present, ips, hosts)
+    obs = to_observations(present, ips, hosts)
     assert len(obs) == 1
     o = obs[0]
     assert o["mac"] == "aa:bb:cc:dd:ee:ff"
     assert o["ip"] == "192.168.1.23"
     assert o["hostname"] == "Ziyad-iPhone"
     assert o["interface"] == "eth6"
+    assert o["ap"] == "Main router"
 
 
-def test_merge_observations_ap_device_has_no_interface():
-    # A device seen only via the bridge table (behind an AP) has interface None.
-    present = {"aa:bb:cc:dd:ee:ff": None}
-    obs = merge_observations(present, {}, {"aa:bb:cc:dd:ee:ff": "Phone"})
-    assert obs[0]["interface"] is None
-    assert obs[0]["hostname"] == "Phone"
+def test_build_present_attributes_main_and_ap():
+    main = {"aa:aa:aa:aa:aa:aa": "eth6"}
+    aps = {"Upstairs": {"bb:bb:bb:bb:bb:bb": "eth7"}}
+    present = build_present(main, aps, fdb_macs=set(), known_wifi_macs=set(),
+                            router_name="Main router")
+    assert present["aa:aa:aa:aa:aa:aa"]["ap"] == "Main router"
+    assert present["bb:bb:bb:bb:bb:bb"]["ap"] == "Upstairs"
+    assert present["bb:bb:bb:bb:bb:bb"]["interface"] == "eth7"
 
 
-def test_overlay_aps_attributes_main_and_ap():
-    observations = [
-        # associated to the main router (interface set)
-        {"mac": "aa:aa:aa:aa:aa:aa", "interface": "eth6", "ip": None,
-         "hostname": None, "vendor": "Apple"},
-        # seen only via bridge table (behind some AP, interface None)
-        {"mac": "bb:bb:bb:bb:bb:bb", "interface": None, "ip": None,
-         "hostname": None, "vendor": None},
-    ]
-    ap_assoc = {"Upstairs": {"bb:bb:bb:bb:bb:bb": "eth7"}}
-    out = {o["mac"]: o for o in overlay_aps(observations, ap_assoc, "Main router")}
-    assert out["aa:aa:aa:aa:aa:aa"]["ap"] == "Main router"
-    assert out["bb:bb:bb:bb:bb:bb"]["ap"] == "Upstairs"
-    assert out["bb:bb:bb:bb:bb:bb"]["interface"] == "eth7"
+def test_build_present_keeps_unknown_fdb_device():
+    # A device only ever seen via the bridge table (wired / behind unlisted AP)
+    # has no known wifi interface, so the FDB sighting keeps it present.
+    present = build_present({}, {}, fdb_macs={"cc:cc:cc:cc:cc:cc"},
+                            known_wifi_macs=set(), router_name="Main router")
+    assert "cc:cc:cc:cc:cc:cc" in present
+    assert present["cc:cc:cc:cc:cc:cc"]["ap"] is None
+    assert present["cc:cc:cc:cc:cc:cc"]["interface"] is None
 
 
-def test_overlay_aps_adds_ap_only_device():
-    # Device the AP sees but the main router didn't report at all.
-    out = overlay_aps([], {"Garage": {"cc:cc:cc:cc:cc:cc": "eth6"}}, "Main router")
-    assert out[0]["mac"] == "cc:cc:cc:cc:cc:cc"
-    assert out[0]["ap"] == "Garage"
+def test_build_present_drops_disconnected_wifi_lingering_in_fdb():
+    # THE BUG FIX: a known wifi device that has left every assoclist must NOT be
+    # kept "present" just because it still lingers in the bridge table.
+    present = build_present(
+        main_assoc={},                       # not associated anymore
+        ap_assoc={},
+        fdb_macs={"dd:dd:dd:dd:dd:dd"},       # still in the bridge FDB
+        known_wifi_macs={"dd:dd:dd:dd:dd:dd"},  # we've seen it on wifi before
+        router_name="Main router",
+    )
+    assert "dd:dd:dd:dd:dd:dd" not in present
+
+
+def test_build_present_assoclist_overrides_fdb():
+    # Same mac in both fdb and assoclist -> present via assoclist (authoritative).
+    present = build_present(
+        main_assoc={"ee:ee:ee:ee:ee:ee": "eth6"},
+        ap_assoc={},
+        fdb_macs={"ee:ee:ee:ee:ee:ee"},
+        known_wifi_macs={"ee:ee:ee:ee:ee:ee"},
+        router_name="Main router",
+    )
+    assert present["ee:ee:ee:ee:ee:ee"]["ap"] == "Main router"
 
 
 def test_tcp_check_success_on_open_port():

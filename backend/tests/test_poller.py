@@ -11,14 +11,22 @@ from backend.store import Store
 
 
 class FakeRouter:
-    def __init__(self, obs=None, raise_exc=None):
-        self.obs = obs or []
+    def __init__(self, associated=None, fdb=None, ip_by_mac=None, host_by_mac=None, raise_exc=None):
+        self.associated = associated or {}
+        self.fdb = fdb or set()
+        self.ip_by_mac = ip_by_mac or {}
+        self.host_by_mac = host_by_mac or {}
         self.raise_exc = raise_exc
 
-    def fetch_clients(self):
+    def fetch_raw(self):
         if self.raise_exc:
             raise self.raise_exc
-        return self.obs
+        return {
+            "associated": self.associated,
+            "fdb": self.fdb,
+            "ip_by_mac": self.ip_by_mac,
+            "host_by_mac": self.host_by_mac,
+        }
 
     def update_settings(self, s):
         pass
@@ -41,8 +49,9 @@ def _poller(tmp_path, router):
 
 def test_poll_cycle_broadcasts_devices_on_success(tmp_path):
     router = FakeRouter(
-        obs=[{"mac": "aa:bb:cc:dd:ee:01", "ip": "192.168.1.9",
-              "hostname": "phone", "interface": "eth6", "vendor": "Apple"}]
+        associated={"aa:bb:cc:dd:ee:01": "eth6"},
+        ip_by_mac={"aa:bb:cc:dd:ee:01": "192.168.1.9"},
+        host_by_mac={"aa:bb:cc:dd:ee:01": "phone"},
     )
     p, captured = _poller(tmp_path, router)
     state = asyncio.run(p._run_cycle())
@@ -51,6 +60,19 @@ def test_poll_cycle_broadcasts_devices_on_success(tmp_path):
     assert captured[-1] is state
     macs = [d["mac"] for d in state["unassigned_present"]]
     assert "aa:bb:cc:dd:ee:01" in macs
+
+
+def test_poll_cycle_drops_wifi_device_lingering_in_fdb(tmp_path):
+    # Cycle 1: phone associated to the main router -> learns its wifi interface.
+    p, _ = _poller(tmp_path, FakeRouter(associated={"aa:bb:cc:dd:ee:01": "eth6"}))
+    asyncio.run(p._run_cycle())
+    assert p.store.get_device("aa:bb:cc:dd:ee:01")["is_present"] == 1
+
+    # Cycle 2: phone disconnected (gone from assoclist) but still in bridge FDB.
+    # It must NOT be marked present again.
+    p.router = FakeRouter(associated={}, fdb={"aa:bb:cc:dd:ee:01"})
+    asyncio.run(p._run_cycle())
+    assert p.store.get_device("aa:bb:cc:dd:ee:01")["is_present"] == 0
 
 
 def test_poll_cycle_survives_router_error(tmp_path):
@@ -93,6 +115,6 @@ def test_poll_cycle_survives_broadcast_error(tmp_path):
         raise RuntimeError("ws boom")
 
     p = Poller(store, bad_bcast)
-    p.router = FakeRouter(obs=[])
+    p.router = FakeRouter()
     # Should not raise.
     asyncio.run(p._run_cycle())

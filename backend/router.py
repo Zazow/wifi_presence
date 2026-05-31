@@ -124,64 +124,62 @@ def parse_fdb(output: str) -> set[str]:
     return macs
 
 
-def overlay_aps(
-    observations: list[dict[str, Any]],
-    ap_associated: dict[str, dict[str, str]],
+def build_present(
+    main_assoc: dict[str, str],
+    ap_assoc: dict[str, dict[str, str]],
+    fdb_macs: set[str],
+    known_wifi_macs: set[str],
     router_name: str,
-) -> list[dict[str, Any]]:
-    """Attribute each observation to the access point it's connected to.
+) -> dict[str, dict[str, Any]]:
+    """Decide which MACs are currently present and which AP each is on.
 
-    - Devices associated to one of the main router's own radios (interface set
-      by `merge_observations`) get `ap = router_name`.
-    - Devices found in a configured AP's association list get `ap = <AP name>`
-      (this wins — it's where the device physically is).
-    - Everything else (seen only via the bridge table) keeps `ap = None`
-      ("behind an AP", which one unknown).
+    Returns {mac: {"interface", "ap"}}. Pure function.
 
-    `ap_associated` maps AP name -> {mac: interface}. Pure function.
+    Signal priority — association lists are AUTHORITATIVE:
+    - A MAC in the main router's assoclist is present, ap = router_name.
+    - A MAC in a configured AP's assoclist is present, ap = that AP (wins; it's
+      where the device physically is).
+    - The bridge forwarding table (`fdb_macs`) only adds devices we CANNOT see
+      via any assoclist — wired clients or devices behind unlisted APs. Crucially
+      it is IGNORED for `known_wifi_macs` (devices we've previously seen
+      associate to a radio we poll): such a device that has left every assoclist
+      is gone, even though it lingers in the bridge table for the ageing time.
+      This stops a disconnected phone from appearing present beyond the grace
+      window.
     """
-    by_mac: dict[str, dict[str, Any]] = {}
-    for o in observations:
-        item = dict(o)
-        item.setdefault("ap", None)
-        if item.get("interface") is not None and item["ap"] is None:
-            item["ap"] = router_name
-        by_mac[item["mac"]] = item
+    present: dict[str, dict[str, Any]] = {}
 
-    for name, assoc in ap_associated.items():
+    # Bridge table — only for devices with no assoclist coverage.
+    for mac in fdb_macs:
+        if mac in known_wifi_macs:
+            continue
+        present[mac] = {"interface": None, "ap": None}
+
+    # Main router assoclist (authoritative).
+    for mac, iface in main_assoc.items():
+        present[mac] = {"interface": iface, "ap": router_name}
+
+    # Per-AP assoclists (authoritative, highest priority).
+    for name, assoc in ap_assoc.items():
         for mac, iface in assoc.items():
-            item = by_mac.get(mac)
-            if item is None:
-                item = {
-                    "mac": mac,
-                    "ip": None,
-                    "hostname": None,
-                    "vendor": lookup_vendor(mac),
-                }
-                by_mac[mac] = item
-            item["interface"] = iface
-            item["ap"] = name
-    return list(by_mac.values())
+            present[mac] = {"interface": iface, "ap": name}
+
+    return present
 
 
-def merge_observations(
-    present: dict[str, Optional[str]],
+def to_observations(
+    present: dict[str, dict[str, Any]],
     ip_by_mac: dict[str, str],
     host_by_mac: dict[str, str],
 ) -> list[dict[str, Any]]:
-    """Build the normalized observation list for currently-present devices.
-
-    `present` maps every currently-present MAC to its wifi interface, or None
-    when the device was seen via the bridge table rather than associated to one
-    of the main router's own radios (e.g. it's behind an AP). The other maps
-    just enrich each device with IP and hostname.
-    """
+    """Turn the present-set into enriched observation rows for the store."""
     observations = []
-    for mac, iface in present.items():
+    for mac, meta in present.items():
         observations.append(
             {
                 "mac": mac,
-                "interface": iface,
+                "interface": meta.get("interface"),
+                "ap": meta.get("ap"),
                 "ip": ip_by_mac.get(mac),
                 "hostname": host_by_mac.get(mac),
                 "vendor": lookup_vendor(mac),
@@ -277,9 +275,12 @@ class RouterClient:
             associated.update(parse_assoclist(self._run(client, cmd), iface))
         return associated
 
-    def fetch_clients(self) -> list[dict[str, Any]]:
-        """Run the discovery commands and return normalized observations.
+    def fetch_raw(self) -> dict[str, Any]:
+        """Gather the raw signals from the main router in one SSH session:
+        {associated: {mac: iface}, fdb: set[mac], ip_by_mac, host_by_mac}.
 
+        Returning the components (rather than a merged list) lets the poller
+        decide presence with assoclist authoritative over the bridge table.
         Raises on connection/auth failure so the poller can apply backoff.
         """
         with self._lock:
@@ -288,8 +289,8 @@ class RouterClient:
 
             associated = self._associated(client, s)
 
-            # Bridge table catches devices behind APs / AiMesh nodes / switches
-            # that never associate to the main router's own radios.
+            # Bridge table catches devices behind APs / switches that never
+            # associate to the main router's own radios.
             fdb_macs: set[str] = set()
             if s.get("cmd_fdb"):
                 fdb_macs = parse_fdb(self._run(client, s["cmd_fdb"]))
@@ -297,15 +298,16 @@ class RouterClient:
             ip_by_mac = parse_neigh(self._run(client, s["cmd_neigh"]))
             host_by_mac = parse_leases(self._run(client, s["cmd_leases"]))
 
-        # Union: associated MACs keep their wifi interface; FDB-only MACs have
-        # interface None (we don't know which AP they're on).
-        present: dict[str, Optional[str]] = {m: None for m in fdb_macs}
-        present.update(associated)
-        return merge_observations(present, ip_by_mac, host_by_mac)
+        return {
+            "associated": associated,
+            "fdb": fdb_macs,
+            "ip_by_mac": ip_by_mac,
+            "host_by_mac": host_by_mac,
+        }
 
     def fetch_associated(self) -> dict[str, str]:
         """{mac: interface} for an access point — used to attribute clients to
-        the AP they're connected to. Lighter than fetch_clients (no FDB/leases).
+        the AP they're connected to. Lighter than fetch_raw (no FDB/leases).
         """
         with self._lock:
             client = self._ensure_connection()

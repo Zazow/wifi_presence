@@ -12,7 +12,7 @@ import time
 from typing import Any, Callable, Optional
 
 from .presence import compute_state
-from .router import RouterClient, overlay_aps
+from .router import RouterClient, build_present, to_observations
 from .store import Store
 
 
@@ -139,10 +139,17 @@ class Poller:
         expiries even while the router is briefly unreachable.
         """
         try:
-            observations = await asyncio.to_thread(self.router.fetch_clients)
+            raw = await asyncio.to_thread(self.router.fetch_raw)
             ap_assoc = await self._fetch_ap_assoc()
             router_name = self.store.get_settings().get("router_name", "Main router")
-            observations = overlay_aps(observations, ap_assoc, router_name)
+            present = build_present(
+                raw["associated"],
+                ap_assoc,
+                raw["fdb"],
+                self.store.known_wifi_macs(),
+                router_name,
+            )
+            observations = to_observations(present, raw["ip_by_mac"], raw["host_by_mac"])
             self.store.record_observations(observations, time.time())
             self.last_error = None
             self.last_poll = time.time()
