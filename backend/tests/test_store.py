@@ -60,12 +60,28 @@ def _store(tmp_path):
 def test_settings_persist_across_reopen(tmp_path):
     db = tmp_path / "test.db"
     s = Store(db)
-    s.update_settings({"poll_interval": 45, "grace_minutes": 15})
+    s.update_settings({"poll_interval": 45, "grace_seconds": 15})
     s.close()
     s2 = Store(db)
     settings = s2.get_settings()
     assert settings["poll_interval"] == 45
-    assert settings["grace_minutes"] == 15
+    assert settings["grace_seconds"] == 15
+
+
+def test_grace_minutes_migrates_to_seconds(tmp_path):
+    import json as _json
+    import sqlite3
+    db = tmp_path / "legacy.db"
+    # Simulate an old DB that stored grace_minutes.
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    c.execute("INSERT INTO settings VALUES ('grace_minutes', ?)", (_json.dumps(10),))
+    c.commit()
+    c.close()
+    s = Store(db)
+    settings = s.get_settings()
+    assert settings["grace_seconds"] == 600
+    assert "grace_minutes" not in settings
 
 
 def test_mapping_persists_across_reopen(tmp_path):

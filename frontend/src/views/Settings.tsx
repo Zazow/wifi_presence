@@ -11,7 +11,7 @@ type FieldKey =
   | "router_password"
   | "router_key_path"
   | "poll_interval"
-  | "grace_minutes";
+  | "grace_seconds";
 type CmdKey = "cmd_ifnames" | "cmd_assoclist" | "cmd_neigh" | "cmd_leases" | "cmd_fdb";
 
 const FIELDS: [FieldKey, string, FieldType][] = [
@@ -21,8 +21,8 @@ const FIELDS: [FieldKey, string, FieldType][] = [
   ["router_user", "SSH username", "text"],
   ["router_password", "SSH password", "password"],
   ["router_key_path", "SSH key path (optional, overrides password)", "text"],
-  ["poll_interval", "Poll interval (seconds)", "number"],
-  ["grace_minutes", "Away grace window (minutes)", "number"],
+  ["poll_interval", "Poll interval — seconds between router checks", "number"],
+  ["grace_seconds", "Away grace — seconds unseen before 'away'", "number"],
 ];
 
 const AP_FIELDS: [keyof AccessPoint, string, FieldType][] = [
@@ -105,6 +105,12 @@ export default function Settings() {
             />
           </label>
         ))}
+        <p className="muted small">
+          Updates (disconnects, AP changes) appear within one poll interval, so
+          lower it for snappier results — e.g. 5s. The grace window is the floor
+          before someone flips to "away"; it's automatically kept at least as
+          large as the poll interval to avoid false "away" flicker.
+        </p>
       </div>
 
       <div className="card form-card ap-section">

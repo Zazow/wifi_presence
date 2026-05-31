@@ -20,8 +20,11 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "router_user": "admin",
     "router_password": "",
     "router_key_path": "",  # optional private key; takes priority over password
-    "poll_interval": 30,  # seconds
-    "grace_minutes": 10,
+    "poll_interval": 15,  # seconds between router polls (the responsiveness ceiling)
+    # How long after a device was last seen we still count it present. Effective
+    # value is floored to the poll interval so a still-connected device can't
+    # flap to "away" between polls.
+    "grace_seconds": 30,
     # Advanced command overrides. Empty string => use built-in default.
     "cmd_ifnames": "nvram get wl_ifnames",
     "cmd_assoclist": "wl -i {iface} assoclist",
@@ -175,6 +178,24 @@ class Store:
             self._conn.execute("ALTER TABLE devices ADD COLUMN ap TEXT")
         if "present_since" not in cols:
             self._conn.execute("ALTER TABLE devices ADD COLUMN present_since REAL")
+
+        # Settings: grace was once stored in minutes; convert to seconds.
+        keys = {
+            r["key"] for r in self._conn.execute("SELECT key FROM settings")
+        }
+        if "grace_minutes" in keys and "grace_seconds" not in keys:
+            row = self._conn.execute(
+                "SELECT value FROM settings WHERE key = 'grace_minutes'"
+            ).fetchone()
+            try:
+                minutes = float(json.loads(row["value"]))
+            except Exception:
+                minutes = 10.0
+            self._conn.execute(
+                "INSERT INTO settings(key, value) VALUES ('grace_seconds', ?)",
+                (json.dumps(int(minutes * 60)),),
+            )
+            self._conn.execute("DELETE FROM settings WHERE key = 'grace_minutes'")
 
     # ---- settings ---------------------------------------------------------
     def get_settings(self) -> dict[str, Any]:

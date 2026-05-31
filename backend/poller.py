@@ -114,7 +114,11 @@ class Poller:
         people = self.store.list_people()
         devices = self.store.list_devices()
         settings = self.store.get_settings()
-        state = compute_state(people, devices, settings["grace_minutes"], time.time())
+        # Never let the grace window drop below the poll interval, or a device
+        # that's still connected would flap to "away" between polls.
+        poll_interval = int(settings.get("poll_interval", 15))
+        grace_seconds = max(int(settings.get("grace_seconds", 30)), poll_interval)
+        state = compute_state(people, devices, grace_seconds, time.time())
         state["status"] = {
             "last_poll": self.last_poll,
             "last_error": self.last_error,

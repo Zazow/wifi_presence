@@ -87,7 +87,7 @@ class SettingsIn(BaseModel):
     router_password: Optional[str] = None
     router_key_path: Optional[str] = None
     poll_interval: Optional[int] = None
-    grace_minutes: Optional[int] = None
+    grace_seconds: Optional[int] = None
     cmd_ifnames: Optional[str] = None
     cmd_assoclist: Optional[str] = None
     cmd_neigh: Optional[str] = None

@@ -33,7 +33,7 @@ export interface PersonState {
 
 export interface PresenceState {
   now: number;
-  grace_minutes: number;
+  grace_seconds: number;
   people: PersonState[];
   unassigned_present: Device[];
   status?: { last_poll: number | null; last_error: string | null };
@@ -56,7 +56,7 @@ export interface Settings {
   router_password: string;
   router_key_path: string;
   poll_interval: number;
-  grace_minutes: number;
+  grace_seconds: number;
   cmd_ifnames: string;
   cmd_assoclist: string;
   cmd_neigh: string;

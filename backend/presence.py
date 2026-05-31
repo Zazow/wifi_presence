@@ -21,7 +21,7 @@ def device_active(device: dict[str, Any], now: float, grace_seconds: float) -> b
 def compute_state(
     people: list[dict[str, Any]],
     devices: list[dict[str, Any]],
-    grace_minutes: float,
+    grace_seconds: float,
     now: float,
 ) -> dict[str, Any]:
     """Return the full presence state object served to the UI / WebSocket.
@@ -29,16 +29,16 @@ def compute_state(
     Shape:
     {
       "now": <epoch>,
-      "grace_minutes": <n>,
+      "grace_seconds": <n>,
       "people": [
         {"id", "name", "home": bool, "last_seen": float|None,
          "devices": [ {device fields..., "active": bool} ]}
       ],
       "unassigned_present": [ {device fields..., "active": True} ]
     }
-    Ignored devices are excluded entirely.
+    Ignored devices are excluded entirely. `grace_seconds` is the effective
+    window (already floored to the poll interval by the caller).
     """
-    grace_seconds = grace_minutes * 60.0
     visible = [d for d in devices if not d.get("ignored")]
 
     by_person: dict[int, list[dict[str, Any]]] = {}
@@ -78,7 +78,7 @@ def compute_state(
 
     return {
         "now": now,
-        "grace_minutes": grace_minutes,
+        "grace_seconds": grace_seconds,
         "people": people_out,
         "unassigned_present": unassigned,
     }
