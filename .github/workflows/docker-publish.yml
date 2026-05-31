@@ -1,12 +1,20 @@
 name: Build and publish image
 
-# Build the Docker image and push it to GitHub Container Registry (GHCR) on
-# every push to the default branch. Free for public repos/packages.
+# Build the Docker image and push it to GitHub Container Registry (GHCR).
+# - Automatically on every push to the default branch.
+# - On demand from the Actions tab: open "Build and publish image" -> "Run
+#   workflow" (optionally enter a custom tag like "v1" or "test").
+# Free for public repos/packages.
 
 on:
   push:
     branches: [main, master]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Optional extra image tag (e.g. v1, test). Leave blank for just :latest."
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -36,6 +44,7 @@ jobs:
           tags: |
             type=raw,value=latest
             type=sha,format=short
+            type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
