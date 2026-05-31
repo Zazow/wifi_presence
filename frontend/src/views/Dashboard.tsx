@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api } from "../api";
-import { avatarHue, deviceName, initials, timeAgo } from "../util";
+import { avatarStyle, deviceName, initials, timeAgo } from "../util";
 import type { PersonState, PresenceState } from "../types";
 import RefreshButton from "../components/RefreshButton";
 import RegisterDeviceModal from "../components/RegisterDeviceModal";
@@ -114,19 +114,11 @@ export default function Dashboard({ state }: { state: PresenceState | null }) {
 function PersonCard({ person, home = false }: { person: PersonState; home?: boolean }) {
   const devices = person.devices ?? [];
   const activeCount = devices.filter((d) => d.active).length;
-  const hue = avatarHue(person.name);
 
   return (
     <div className={`person-card ${home ? "is-home" : "is-away"}`}>
       <div className="person-head">
-        <span
-          className="avatar"
-          style={{
-            background: `hsl(${hue} 55% 22%)`,
-            color: `hsl(${hue} 80% 72%)`,
-            borderColor: `hsl(${hue} 60% 40% / 0.5)`,
-          }}
-        >
+        <span className="avatar" style={avatarStyle(person.name)}>
           {initials(person.name)}
         </span>
         <div className="person-meta">

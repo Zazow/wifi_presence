@@ -29,3 +29,17 @@ export function avatarHue(name: string): number {
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
   return AVATAR_HUES[h % AVATAR_HUES.length];
 }
+
+// Tinted avatar colours tuned for a light background.
+export function avatarStyle(name: string): {
+  background: string;
+  color: string;
+  borderColor: string;
+} {
+  const h = avatarHue(name);
+  return {
+    background: `hsl(${h} 72% 94%)`,
+    color: `hsl(${h} 45% 34%)`,
+    borderColor: `hsl(${h} 52% 85%)`,
+  };
+}

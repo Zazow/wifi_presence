@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { avatarHue, deviceName, initials } from "../util";
+import { avatarStyle, deviceName, initials } from "../util";
 import type { Device, Person } from "../types";
 
 export default function People() {
@@ -54,19 +54,11 @@ export default function People() {
 
       <div className="cards">
         {people.map((p) => {
-          const hue = avatarHue(p.name);
           const owned = devicesFor(p.id);
           return (
             <div className="person-card" key={p.id}>
               <div className="person-head">
-                <span
-                  className="avatar"
-                  style={{
-                    background: `hsl(${hue} 55% 22%)`,
-                    color: `hsl(${hue} 80% 72%)`,
-                    borderColor: `hsl(${hue} 60% 40% / 0.5)`,
-                  }}
-                >
+                <span className="avatar" style={avatarStyle(p.name)}>
                   {initials(p.name)}
                 </span>
                 <input
