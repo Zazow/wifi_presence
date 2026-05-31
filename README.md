@@ -125,6 +125,10 @@ reloads while the API stays live.
   show its name; devices behind an unlisted AP show "behind AP".
 - **Refresh:** the Dashboard and Devices views have a Refresh button that forces
   an immediate poll instead of waiting for the next interval.
+- **Notifications (optional):** set an ntfy topic URL and/or a webhook URL under
+  Settings → Notifications to get a push when a person arrives or leaves.
+- **Access-point health:** the dashboard shows a status pill per target (main
+  router + each AP) — green with a client count, or red when unreachable.
 - **Register this device:** the fastest way to map devices — a family member
   opens the page **on their own phone** (on home Wi-Fi) and taps *Register this
   device*. The app matches their connection's IP to the device and lets them

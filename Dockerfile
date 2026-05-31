@@ -29,5 +29,9 @@ COPY --from=frontend /frontend/dist frontend/dist
 VOLUME ["/data"]
 EXPOSE 8000
 
+# Liveness: hit /healthz (no curl in slim image, so use Python).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD python -c "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('PORT','8000')+'/healthz', timeout=4)" || exit 1
+
 # PORT is overridable (e.g. if 8000 is taken on the host).
 CMD ["sh", "-c", "uvicorn backend.app:app --host 0.0.0.0 --port ${PORT:-8000}"]

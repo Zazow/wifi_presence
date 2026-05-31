@@ -31,12 +31,21 @@ export interface PersonState {
   devices: Device[];
 }
 
+export interface ApHealth {
+  name: string;
+  role: "router" | "ap";
+  ok: boolean | null;
+  error: string | null;
+  clients: number;
+}
+
 export interface PresenceState {
   now: number;
   grace_seconds: number;
   people: PersonState[];
   unassigned_present: Device[];
   status?: { last_poll: number | null; last_error: string | null };
+  aps?: ApHealth[];
 }
 
 export interface AccessPoint {
@@ -63,6 +72,8 @@ export interface Settings {
   cmd_leases: string;
   cmd_fdb: string;
   access_points: AccessPoint[];
+  notify_ntfy_url: string;
+  notify_webhook_url: string;
 }
 
 export interface WhoAmI {

@@ -39,6 +39,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     #   {"name", "host", "port", "user", "password", "key_path"}
     # Empty fields fall back to the main router's credentials.
     "access_points": [],
+    # Arrive/leave notifications (optional). ntfy: full topic URL
+    # (e.g. https://ntfy.sh/my-house). webhook: any URL that accepts a JSON POST.
+    "notify_ntfy_url": "",
+    "notify_webhook_url": "",
 }
 
 SCHEMA = """

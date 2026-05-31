@@ -18,6 +18,7 @@ export default function Dashboard({ state }: { state: PresenceState | null }) {
   const away = people.filter((p) => !p.home);
   const unassigned = state.unassigned_present ?? [];
   const status = state.status;
+  const aps = state.aps ?? [];
 
   return (
     <div className="dashboard">
@@ -53,6 +54,22 @@ export default function Dashboard({ state }: { state: PresenceState | null }) {
       {status?.last_error && (
         <div className="banner error">
           Router unreachable: {status.last_error}. Showing last known presence.
+        </div>
+      )}
+
+      {aps.length > 1 && (
+        <div className="ap-health">
+          {aps.map((ap) => (
+            <span
+              key={ap.name}
+              className={`ap-pill ${ap.ok === false ? "bad" : "good"}`}
+              title={ap.ok === false ? ap.error || "unreachable" : `${ap.clients} client${ap.clients === 1 ? "" : "s"}`}
+            >
+              <span className={`status-dot ${ap.ok === false ? "off" : "on"}`} />
+              {ap.name}
+              {ap.ok === false ? " · unreachable" : ` · ${ap.clients}`}
+            </span>
+          ))}
         </div>
       )}
 

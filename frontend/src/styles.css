@@ -132,6 +132,15 @@ select { cursor: pointer; }
 .stat-divider { width: 1px; align-self: stretch; background: var(--border); }
 .hero-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
+/* ---- AP health strip ---- */
+.ap-health { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 4px; }
+.ap-pill {
+  display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px;
+  padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-dim);
+}
+.ap-pill.bad { color: var(--danger); border-color: var(--danger-border); background: var(--danger-dim); }
+
 /* ---- groups & cards ---- */
 .group { margin-top: 30px; }
 .group-title {

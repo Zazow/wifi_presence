@@ -13,6 +13,12 @@ type FieldKey =
   | "poll_interval"
   | "grace_seconds";
 type CmdKey = "cmd_ifnames" | "cmd_assoclist" | "cmd_neigh" | "cmd_leases" | "cmd_fdb";
+type NotifyKey = "notify_ntfy_url" | "notify_webhook_url";
+
+const NOTIFY_FIELDS: [NotifyKey, string][] = [
+  ["notify_ntfy_url", "ntfy topic URL (e.g. https://ntfy.sh/my-house)"],
+  ["notify_webhook_url", "Webhook URL (JSON POST on arrive/leave)"],
+];
 
 const FIELDS: [FieldKey, string, FieldType][] = [
   ["router_name", "Main router name (shown as its AP)", "text"],
@@ -142,6 +148,24 @@ export default function Settings() {
         <button type="button" className="btn-link" onClick={addAp}>
           + Add access point
         </button>
+      </div>
+
+      <div className="card form-card">
+        <h2 className="section-title">Notifications</h2>
+        <p className="muted small">
+          Optional — get a push when someone arrives or leaves. Fill either or
+          both; leave blank to disable.
+        </p>
+        {NOTIFY_FIELDS.map(([key, label]) => (
+          <label key={key} className="field">
+            <span>{label}</span>
+            <input
+              value={form[key] ?? ""}
+              placeholder="https://…"
+              onChange={(e) => set(key, e.target.value)}
+            />
+          </label>
+        ))}
       </div>
 
       <button

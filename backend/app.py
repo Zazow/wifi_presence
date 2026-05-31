@@ -95,6 +95,8 @@ class SettingsIn(BaseModel):
     cmd_fdb: Optional[str] = None
     router_name: Optional[str] = None
     access_points: Optional[list[dict[str, Any]]] = None
+    notify_ntfy_url: Optional[str] = None
+    notify_webhook_url: Optional[str] = None
 
 
 def _redact(settings: dict[str, Any]) -> dict[str, Any]:
@@ -109,6 +111,13 @@ def _redact(settings: dict[str, Any]) -> dict[str, Any]:
         aps.append(ap)
     out["access_points"] = aps
     return out
+
+
+# ---- health --------------------------------------------------------------
+@app.get("/healthz")
+def healthz() -> dict[str, str]:
+    """Liveness probe for Docker/Dockge — cheap, no SSH."""
+    return {"status": "ok"}
 
 
 # ---- presence state ------------------------------------------------------
