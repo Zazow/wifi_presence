@@ -34,6 +34,15 @@ export function clockTime(epochSeconds: number | null | undefined): string {
   return new Date(epochSeconds * 1000).toLocaleString();
 }
 
+// Friendly short timestamp: "6:25 PM" if today, else "May 31, 6:25 PM".
+export function clockShort(epochSeconds: number | null | undefined): string {
+  if (!epochSeconds) return "";
+  const d = new Date(epochSeconds * 1000);
+  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const sameDay = d.toDateString() === new Date().toDateString();
+  return sameDay ? time : `${d.toLocaleDateString([], { month: "short", day: "numeric" })}, ${time}`;
+}
+
 // Stable initials + colour for a person, used for avatars.
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/);

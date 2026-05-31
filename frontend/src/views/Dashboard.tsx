@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api } from "../api";
-import { avatarStyle, deviceName, durationSince, initials, timeAgo } from "../util";
+import { avatarStyle, clockShort, deviceName, durationSince, initials, timeAgo } from "../util";
 import type { PersonState, PresenceState } from "../types";
 import RefreshButton from "../components/RefreshButton";
 import RegisterDeviceModal from "../components/RegisterDeviceModal";
@@ -113,7 +113,12 @@ export default function Dashboard({ state }: { state: PresenceState | null }) {
 
 function PersonCard({ person, home = false }: { person: PersonState; home?: boolean }) {
   const devices = person.devices ?? [];
-  const activeCount = devices.filter((d) => d.active).length;
+  const total = devices.length;
+  const presentCount = devices.filter((d) => d.active).length;
+  const sinceVals = devices
+    .map((d) => d.present_since)
+    .filter((x): x is number => typeof x === "number");
+  const latestSince = sinceVals.length ? Math.max(...sinceVals) : null;
 
   return (
     <div className={`person-card ${home ? "is-home" : "is-away"}`}>
@@ -126,9 +131,14 @@ function PersonCard({ person, home = false }: { person: PersonState; home?: bool
           <div className="person-status">
             <span className={`status-dot ${home ? "on" : "off"}`} />
             {home
-              ? `${activeCount} device${activeCount === 1 ? "" : "s"} present`
+              ? `${presentCount} of ${total} device${total === 1 ? "" : "s"} present`
               : `last seen ${timeAgo(person.last_seen)}`}
           </div>
+          {home && latestSince && (
+            <div className="person-substatus">
+              latest device present since {clockShort(latestSince)}
+            </div>
+          )}
         </div>
       </div>
       {devices.length > 0 && (
