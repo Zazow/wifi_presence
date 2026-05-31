@@ -1,12 +1,13 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import qrcode from "qrcode-generator";
-import { api } from "../api.js";
-import { deviceName } from "../util.js";
+import { api } from "../api";
+import { deviceName } from "../util";
+import type { Person, WhoAmI } from "../types";
 
 const LOOPBACK = ["localhost", "127.0.0.1", "::1", "[::1]"];
 
 // URL to open on the phone so it lands straight on the register flow.
-function phoneUrl(serverIp) {
+function phoneUrl(serverIp: string | null): string {
   const onLoopback = LOOPBACK.includes(location.hostname);
   // When viewing on the server itself, swap in the server's LAN IP so the QR
   // is reachable from a phone; otherwise the current origin already works.
@@ -14,7 +15,7 @@ function phoneUrl(serverIp) {
   return `${location.protocol}//${host}/?register=1`;
 }
 
-function qrDataUrl(text) {
+function qrDataUrl(text: string): string {
   const qr = qrcode(0, "M");
   qr.addData(text);
   qr.make();
@@ -25,10 +26,16 @@ function qrDataUrl(text) {
 // member just opens the page on their phone and taps to assign it — no list,
 // no MAC hunting. When opened somewhere that ISN'T the phone (e.g. a desktop),
 // we show a QR code to open the flow on the phone instead.
-export default function RegisterDeviceModal({ onClose, onDone }) {
+export default function RegisterDeviceModal({
+  onClose,
+  onDone,
+}: {
+  onClose: () => void;
+  onDone?: () => void | Promise<void>;
+}) {
   const [loading, setLoading] = useState(true);
-  const [info, setInfo] = useState(null); // { ip, device, server_ip }
-  const [people, setPeople] = useState([]);
+  const [info, setInfo] = useState<WhoAmI | null>(null);
+  const [people, setPeople] = useState<Person[]>([]);
   const [sel, setSel] = useState("");
   const [newName, setNewName] = useState("");
   const [saving, setSaving] = useState(false);
@@ -43,13 +50,13 @@ export default function RegisterDeviceModal({ onClose, onDone }) {
     })();
   }, []);
 
-  const dev = info?.device;
+  const dev = info?.device ?? null;
 
   async function register() {
     if (!dev) return;
     setSaving(true);
     try {
-      let pid = sel;
+      let pid: number | string = sel;
       if (newName.trim()) {
         const np = await api.createPerson(newName.trim());
         pid = np.id;
@@ -71,7 +78,7 @@ export default function RegisterDeviceModal({ onClose, onDone }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h2>Register this device</h2>
+        <h2 className="modal-title">Register this device</h2>
 
         {loading && <div className="muted">Detecting this device…</div>}
 
@@ -87,7 +94,9 @@ export default function RegisterDeviceModal({ onClose, onDone }) {
             </div>
             <div className="muted small center mono qr-url">{url}</div>
             <div className="actions">
-              <button type="button" className="secondary" onClick={onClose}>Close</button>
+              <button type="button" className="btn btn-ghost" onClick={onClose}>
+                Close
+              </button>
             </div>
           </>
         )}
@@ -118,7 +127,9 @@ export default function RegisterDeviceModal({ onClose, onDone }) {
               >
                 <option value="">— choose —</option>
                 {people.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
                 ))}
               </select>
             </label>
@@ -138,21 +149,29 @@ export default function RegisterDeviceModal({ onClose, onDone }) {
             </label>
 
             <div className="actions">
-              <button onClick={register} disabled={saving || (!sel && !newName.trim())}>
+              <button
+                className="btn btn-primary"
+                onClick={register}
+                disabled={saving || (!sel && !newName.trim())}
+              >
                 {saving ? "Saving…" : "Register"}
               </button>
-              <button type="button" className="secondary" onClick={onClose}>Cancel</button>
+              <button type="button" className="btn btn-ghost" onClick={onClose}>
+                Cancel
+              </button>
             </div>
           </>
         )}
 
-        {done && (
+        {done && dev && (
           <>
             <div className="banner success">
               Registered <strong>{deviceName(dev)}</strong> ✓
             </div>
             <div className="actions">
-              <button onClick={onClose}>Done</button>
+              <button className="btn btn-primary" onClick={onClose}>
+                Done
+              </button>
             </div>
           </>
         )}
