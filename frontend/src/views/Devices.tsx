@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { timeAgo, deviceName } from "../util";
+import { timeAgo, deviceName, durationSince, clockTime } from "../util";
 import type { Device, DevicePatch, Person } from "../types";
 import RefreshButton from "../components/RefreshButton";
 import RegisterDeviceModal from "../components/RegisterDeviceModal";
@@ -80,6 +80,7 @@ export default function Devices() {
               <th>Vendor</th>
               <th>Access point</th>
               <th>IP</th>
+              <th>Connected</th>
               <th>Last seen</th>
               <th>Person</th>
               <th aria-label="actions"></th>
@@ -98,6 +99,9 @@ export default function Devices() {
                 <td>{d.vendor || "—"}</td>
                 <td className="small">{d.ap || (d.is_present ? "behind AP" : "—")}</td>
                 <td className="mono small">{d.ip || "—"}</td>
+                <td className="small" title={d.present_since ? `since ${clockTime(d.present_since)}` : ""}>
+                  {d.is_present && d.present_since ? durationSince(d.present_since) : "—"}
+                </td>
                 <td className="small">{timeAgo(d.last_seen)}</td>
                 <td>
                   <select
@@ -128,7 +132,7 @@ export default function Devices() {
             ))}
             {visible.length === 0 && (
               <tr>
-                <td colSpan={7} className="muted center pad">
+                <td colSpan={8} className="muted center pad">
                   No devices in this view.
                 </td>
               </tr>

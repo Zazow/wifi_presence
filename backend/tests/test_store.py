@@ -106,6 +106,25 @@ def test_delete_person_unassigns_devices(tmp_path):
     assert s.get_device("a")["person_id"] is None
 
 
+def test_present_since_tracks_connection_streak(tmp_path):
+    s = _store(tmp_path)
+    t0 = 1000.0
+    # First sighting -> present_since = t0.
+    s.record_observations([{"mac": "a"}], t0)
+    assert s.get_device("a")["present_since"] == t0
+    # Still present a cycle later -> present_since unchanged (continuous streak).
+    s.record_observations([{"mac": "a"}], t0 + 30)
+    assert s.get_device("a")["present_since"] == t0
+    # Disconnects -> streak cleared.
+    s.record_observations([], t0 + 60)
+    dev = s.get_device("a")
+    assert dev["is_present"] == 0
+    assert dev["present_since"] is None
+    # Reconnects -> new streak starts at the reconnect time.
+    s.record_observations([{"mac": "a"}], t0 + 90)
+    assert s.get_device("a")["present_since"] == t0 + 90
+
+
 def test_enrichment_not_wiped_by_missing_values(tmp_path):
     s = _store(tmp_path)
     now = time.time()

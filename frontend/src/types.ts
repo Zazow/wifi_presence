@@ -12,6 +12,7 @@ export interface Device {
   ignored: number;
   first_seen: number | null;
   last_seen: number | null;
+  present_since: number | null;
   is_present: number;
   active?: boolean; // added by the presence engine in state payloads
 }

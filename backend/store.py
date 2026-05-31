@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS devices (
     ignored INTEGER NOT NULL DEFAULT 0,
     first_seen REAL,
     last_seen REAL,
+    present_since REAL,
     is_present INTEGER NOT NULL DEFAULT 0
 );
 
@@ -172,6 +173,8 @@ class Store:
         cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(devices)")}
         if "ap" not in cols:
             self._conn.execute("ALTER TABLE devices ADD COLUMN ap TEXT")
+        if "present_since" not in cols:
+            self._conn.execute("ALTER TABLE devices ADD COLUMN present_since REAL")
 
     # ---- settings ---------------------------------------------------------
     def get_settings(self) -> dict[str, Any]:
@@ -376,8 +379,8 @@ class Store:
                 if existing is None:
                     self._conn.execute(
                         "INSERT INTO devices(mac, hostname, ip, vendor, interface, ap, "
-                        "first_seen, last_seen, is_present) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)",
+                        "first_seen, last_seen, present_since, is_present) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
                         (
                             mac,
                             o.get("hostname"),
@@ -387,13 +390,14 @@ class Store:
                             o.get("ap"),
                             seen_at,
                             seen_at,
+                            seen_at,
                         ),
                     )
                 else:
                     # Only overwrite enrichment fields when we have a value, so
                     # a momentarily missing hostname/ip/ap doesn't wipe a good one.
-                    # (ap stays last-known when this cycle only saw the device via
-                    # the bridge table and couldn't attribute it to an AP.)
+                    # present_since starts a new "connected" streak only on an
+                    # absent->present transition; it's preserved while present.
                     self._conn.execute(
                         "UPDATE devices SET "
                         "hostname = COALESCE(?, hostname), "
@@ -401,6 +405,8 @@ class Store:
                         "vendor = COALESCE(?, vendor), "
                         "interface = COALESCE(?, interface), "
                         "ap = COALESCE(?, ap), "
+                        "present_since = CASE WHEN is_present = 1 AND present_since IS NOT NULL "
+                        "THEN present_since ELSE ? END, "
                         "last_seen = ?, is_present = 1 "
                         "WHERE mac = ?",
                         (
@@ -410,19 +416,20 @@ class Store:
                             o.get("interface"),
                             o.get("ap"),
                             seen_at,
+                            seen_at,
                             mac,
                         ),
                     )
-            # Mark everything else as not currently present.
+            # Mark everything else as not currently present (ends its streak).
             if seen_macs:
                 placeholders = ",".join("?" for _ in seen_macs)
                 self._conn.execute(
-                    f"UPDATE devices SET is_present = 0 "
+                    f"UPDATE devices SET is_present = 0, present_since = NULL "
                     f"WHERE mac NOT IN ({placeholders})",
                     tuple(seen_macs),
                 )
             else:
-                self._conn.execute("UPDATE devices SET is_present = 0")
+                self._conn.execute("UPDATE devices SET is_present = 0, present_since = NULL")
             self._conn.commit()
 
     def close(self) -> None:

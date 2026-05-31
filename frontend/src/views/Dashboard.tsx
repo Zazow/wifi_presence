@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api } from "../api";
-import { avatarStyle, deviceName, initials, timeAgo } from "../util";
+import { avatarStyle, deviceName, durationSince, initials, timeAgo } from "../util";
 import type { PersonState, PresenceState } from "../types";
 import RefreshButton from "../components/RefreshButton";
 import RegisterDeviceModal from "../components/RegisterDeviceModal";
@@ -137,7 +137,13 @@ function PersonCard({ person, home = false }: { person: PersonState; home?: bool
             <span
               key={d.mac}
               className={`mini ${d.active ? "on" : "off"}`}
-              title={d.ap ? `on ${d.ap}` : d.mac}
+              title={
+                d.is_present && d.present_since
+                  ? `connected for ${durationSince(d.present_since)}${d.ap ? ` · on ${d.ap}` : ""}`
+                  : d.ap
+                    ? `on ${d.ap}`
+                    : d.mac
+              }
             >
               {deviceName(d)}
               {d.active && d.ap ? ` · ${d.ap}` : ""}

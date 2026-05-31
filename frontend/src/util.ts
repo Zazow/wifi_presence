@@ -15,6 +15,25 @@ export function deviceName(d: Device): string {
   return d.label || d.hostname || d.mac;
 }
 
+// Compact "how long since" duration, e.g. "3h 12m", "5m", "just now".
+export function durationSince(epochSeconds: number | null | undefined): string {
+  if (!epochSeconds) return "—";
+  const secs = Math.max(0, Math.floor(Date.now() / 1000 - epochSeconds));
+  if (secs < 60) return "just now";
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ${mins % 60}m`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ${hrs % 24}h`;
+}
+
+// Absolute local time, e.g. "14:03". For tooltips.
+export function clockTime(epochSeconds: number | null | undefined): string {
+  if (!epochSeconds) return "";
+  return new Date(epochSeconds * 1000).toLocaleString();
+}
+
 // Stable initials + colour for a person, used for avatars.
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
